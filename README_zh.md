@@ -52,7 +52,7 @@
   - 提示：阅读[该教程](https://blog.nyamoe.com/2019/09/hoe-to-boot-bpi-m2u-m2b-up-from-sata-device/)了解如何从 SATA 设备启动系统
 - Scaleway Baremetal C1 (Ubuntu 16.04/Debian 9)
 - SoyouStart ARM 服务器 (Ubuntu 16.04/Debian 9)
-  - 提示：阅读[该教程](https://github.com/amefs/quickbox-arm/wikis/%E5%9C%A8-SoyouStart-ARM-%E7%8B%AC%E6%9C%8D%E5%AE%89%E8%A3%85-QuickBox-ARM)了解如何再 SYS 安装该脚本
+  - 提示：阅读[该教程](https://github.com/amefs/quickbox-arm/wikis/%E5%9C%A8-SoyouStart-ARM-%E7%8B%AC%E6%9C%8D%E5%AE%89%E8%A3%85-QuickBox-ARM)了解如何在 SYS 安装该脚本
 
 ### 安装项目
 
