@@ -1,0 +1,7 @@
+#------------------------------------------------------------------------------#
+#                           OFFICIAL Raspbian REPOS                            #
+#------------------------------------------------------------------------------#
+
+###### Raspbian Update Repos
+deb http://archive.raspbian.org/raspbian RELEASE main contrib non-free rpi
+#deb-src http://archive.raspbian.org/raspbian RELEASE main contrib non-free rpi

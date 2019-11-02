@@ -1,0 +1,16 @@
+#------------------------------------------------------------------------------#
+#                            MIRROR UBUNTU REPOS                               #
+#------------------------------------------------------------------------------#
+
+
+###### Ubuntu Main Repos
+deb https://mirrors.tuna.tsinghua.edu.cn/ubuntu-ports/ RELEASE main restricted universe multiverse
+#deb-src https://mirrors.tuna.tsinghua.edu.cn/ubuntu-ports/ RELEASE main restricted universe multiverse
+
+###### Ubuntu Update Repos
+deb https://mirrors.tuna.tsinghua.edu.cn/ubuntu-ports/ RELEASE-security main restricted universe multiverse
+#deb-src https://mirrors.tuna.tsinghua.edu.cn/ubuntu-ports/ RELEASE-security main restricted universe multiverse
+deb https://mirrors.tuna.tsinghua.edu.cn/ubuntu-ports/ RELEASE-updates main restricted universe multiverse
+#deb-src https://mirrors.tuna.tsinghua.edu.cn/ubuntu-ports/ RELEASE-updates main restricted universe multiverse
+deb https://mirrors.tuna.tsinghua.edu.cn/ubuntu-ports/ RELEASE-backports main restricted universe multiverse
+#deb-src https://mirrors.tuna.tsinghua.edu.cn/ubuntu-ports/ RELEASE-backports main restricted universe multiverse

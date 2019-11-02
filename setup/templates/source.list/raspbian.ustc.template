@@ -1,0 +1,7 @@
+#------------------------------------------------------------------------------#
+#                           MIRROR Raspbian REPOS                              #
+#------------------------------------------------------------------------------#
+
+###### Debian Update Repos
+deb http://mirrors.ustc.edu.cn/raspbian/raspbian/ RELEASE main contrib non-free rpi
+#deb-src http://mirrors.ustc.edu.cn/raspbian/raspbian/ RELEASE main contrib non-free rpi
