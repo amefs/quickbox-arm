@@ -318,7 +318,7 @@ function _installApp() {
 		mkdir -p /tmp/dist/libtorrent-rasterbar/usr/local
 		_excute "make install"
 		mv /tmp/dist/libtorrent-rasterbar/usr/local/lib/python2.7/site-packages /tmp/dist/libtorrent-rasterbar/usr/local/lib/python2.7/dist-packages
-		fpm -f -C /tmp/dist/libtorrent-rasterbar -p /root/pool/libtorrent-rasterbar_${LTVERSION}.deb -s dir -t deb -n libtorrent-rasterbar --version ${LTVERSION} --description "libtorrent-rasterbar compiled by QuickBox Lite" >/dev/null 2>&1
+		fpm -f -C /tmp/dist/libtorrent-rasterbar -p /root/pool/libtorrent-rasterbar_${LTVERSION}.deb -s dir -t deb -n libtorrent-rasterbar --version ${LTVERSION} --description "libtorrent-rasterbar compiled by QuickBox ARM" >/dev/null 2>&1
 		_excute "dpkg -i /root/pool/libtorrent-rasterbar_${LTVERSION}.deb"
 		echo ${libtversion} >/install/.libtorrent-rasterbar.lock
 		_excute "ldconfig"
@@ -713,6 +713,15 @@ function _installAppStart() {
 	_success "${APP_TITLE} started."
 }
 
+function _flexget() {
+	username=$(cat /root/.admin.info | cut -d: -f1)
+	if [[ -f "/install/.${username}.flexget.lock" ]]; then
+		if (su ${username} -c 'pip2 freeze --disable-pip-version-check | grep -q "FlexGet"'); then
+			bash /usr/local/bin/quickbox/package/update/updatepackage-flexget -l $OUTTO
+		fi
+	fi
+}
+
 #################################################################################
 # OPT GENERATOR
 #################################################################################
@@ -762,3 +771,7 @@ _configureApp
 _installAppLock
 _installAppStart
 _lockCleanup
+	
+if _version_gt ${deversion} 2.0; then
+	_flexget
+fi

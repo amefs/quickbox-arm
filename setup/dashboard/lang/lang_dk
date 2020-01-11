@@ -36,7 +36,7 @@ $L['PLUGINS'] = 'Plugins';
 // quick help menu tab
 $L['HELP_COMMANDS'] = 'Hjælpekommandoer & Mere';
 $L['QUICK_SYSTEM_TIPS'] = 'Hurtige System Tips';
-$L['SYS_UPGRADE_TXT'] = 'Type this command to upgrade your QuickBox Lite system.';
+$L['SYS_UPGRADE_TXT'] = 'Type this command to upgrade your QuickBox ARM system.';
 $L['SET_LANG_TXT'] = 'Type this command to setup dashboard Language.';
 $L['CHANGEINTERFACE_TXT'] = 'Type this command to setup network interface to be analyse.';
 $L['CLEAN_MEM_TXT'] = 'Skriv denne kommando i ssh (root) for at nulstille systemets fysiske Hukommelsescache.';

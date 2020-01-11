@@ -205,7 +205,7 @@ function _updateApp() {
 		LTVERSION=$(cat configure.ac | grep -Eo "AC_INIT\(libtorrent,.*" | grep -Eo "[0-9.]+" | head -n1)
 		_excute "make -j$(nproc)"
 		_excute "make DESTDIR=/tmp/dist/libtorrent-rakshasa install"
-		fpm -f -C /tmp/dist/libtorrent-rakshasa -p /root/pool/libtorrent-rakshasa_${LTVERSION}.deb -s dir -t deb -n libtorrent-rakshasa --version ${LTVERSION} --description "libtorrent-rakshasa compiled by QuickBox Lite" >/dev/null 2>&1
+		fpm -f -C /tmp/dist/libtorrent-rakshasa -p /root/pool/libtorrent-rakshasa_${LTVERSION}.deb -s dir -t deb -n libtorrent-rakshasa --version ${LTVERSION} --description "libtorrent-rakshasa compiled by QuickBox ARM" >/dev/null 2>&1
 		_excute "dpkg -i /root/pool/libtorrent-rakshasa_${LTVERSION}.deb"
 		rm -rf /tmp/libtorrent
 		_excute "ldconfig"
@@ -219,7 +219,7 @@ function _updateApp() {
 		RTVERSION=$(cat configure.ac | grep -Eo "AC_INIT\(rtorrent,.*" | grep -Eo "[0-9.]+" | head -n1)
 		_excute "make -j$(nproc)"
 		_excute "make DESTDIR=/tmp/dist/rtorrent install"
-		fpm -f -C /tmp/dist/rtorrent -p /root/pool/rtorrent_${RTVERSION}.deb -s dir -t deb -n rtorrent --version ${RTVERSION} --description "rtorrent compiled by QuickBox Lite" >/dev/null 2>&1
+		fpm -f -C /tmp/dist/rtorrent -p /root/pool/rtorrent_${RTVERSION}.deb -s dir -t deb -n rtorrent --version ${RTVERSION} --description "rtorrent compiled by QuickBox ARM" >/dev/null 2>&1
 		_excute "dpkg -i /root/pool/rtorrent_${RTVERSION}.deb"
 		rm -rf /tmp/rtorrent
 		rm -rf /tmp/dist

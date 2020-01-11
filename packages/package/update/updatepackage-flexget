@@ -1,11 +1,10 @@
 #!/bin/bash
-# shellcheck disable=SC2034
 #
-# [QuickBox ARM App Installer Template]
+# [QuickBox ARM Flexget Updater]
 #
 # GitHub:   https://github.com/amefs/quickbox-arm
 # Author:   Amefs
-# Current version:  v1.0.0
+# Current version:  v1.2.0
 # URL:
 # Original Repo:    https://github.com/QuickBox/QB
 # Credits to:       QuickBox.io
@@ -21,12 +20,7 @@
 #################################################################################
 # CORE VARIABLE
 #################################################################################
-DISTRO=$(lsb_release -is)
-RELEASE=$(lsb_release -rs)
 CODENAME=$(lsb_release -cs)
-SETNAME=$(lsb_release -rc)
-# Server IP Address
-SERVERIP=$(ip addr show | grep 'inet ' | grep -v 127.0.0.1 | awk '{print $2}' | cut -d/ -f1 | head -n 1)
 
 ################################################################################
 # HELP FUNCTIONS
@@ -72,63 +66,33 @@ function _error() {
 	printf "${_red}✗ %s${_norm}\n" "$@"
 }
 
+function _version_gt() { test "$(printf '%s\n' "$@" | sort -V | head -n 1)" != "$1"; }
 #################################################################################
 # APP VARIABLE
 #################################################################################
-APP_TITLE="App Template"
-APP_NAME="template"
-APP_SERVICE="service"
-APP_BASEDEPS=""
-APP_WEB_PORT=""
-APP_DAEMON_PORT=""
-APP_HOST="127.0.0.1"
+APP_TITLE="FlexGet"
+APP_NAME="flexget"
+APP_SERVICE="flexget"
+APP_BASEDEPS="python3-pip"
 
-# RANDOM PORT
-APP_WEB_PORT_LOW=""
-APP_WEB_PORT_HIGH=""
-APP_DAEMON_PORT_LOW=""
-APP_DAEMON_PORT_HIGH=""
-
-APP_LOCK=.$APP_NAME.lock
 OUTTO=/srv/dashboard/db/output.log
-version=0.1.0
-username=""
+username=$(cat /root/.admin.info | cut -d: -f1)
+APP_LOCK=.${username}.${APP_NAME}.lock
 
 ################################################################################
 # SCRIPT FUNCTIONS
 ################################################################################
-function _menuinstall() {
-	OUTTO=$(whiptail --title "Log" --inputbox "Specify a log path?\nENTER to make no changes" 10 72 3>&1 1>&2 2>&3)
-	if [[ $OUTTO == "" ]]; then
-		OUTTO=/srv/dashboard/db/output.log
-	fi
-	#username=$(whiptail --title "User" --inputbox "Specify a app owner?" 10 72 3>&1 1>&2 2>&3)
-	version=$(
-		whiptail --title "App Version" --radiolist \
-		"Choose an available version" 12 56 6 \
-		"0.1.0" "stable" off \
-		"1.0.0" "feature" on \
-		"other" "input your version" off 3>&1 1>&2 2>&3
-	)
-	if [[ $version == "other" ]]; then
-		version=$(whiptail --title "App Version" --inputbox "Input your App version" 10 72 3>&1 1>&2 2>&3)
-	fi
-}
-
 function _usage() {
-	echo -e "\nQuickBox ARM $APP_TITLE Installer"
-	echo -e "\nUsage: \n$(basename "$0") [-gh] [-l logfile] [-u username] [-v version]"
+	echo -e "\nQuickBox ARM $APP_TITLE Updater"
+	echo -e "\nUsage: \n$(basename "$0") [-h] [-l logfile] [-u username]"
 	echo -e "\nOptions:\n"
-	echo "-g, --gui                 use a menu configuration to install"
 	echo "-l, --log <logfile>       specific log file"
-	# not required by multi-user applications
-	echo "-u, --user <username>     the user for this installer"
-	echo "-v, --version <version>   the application version you want to install"
+	echo "-u, --user <username>     the user for this updater"
 	echo ""
 	echo "-h, --help                display this help and exit"
 }
 ################################################################################
-# INSTALL FUNCTIONS
+# REMOVE FUNCTIONS
 ################################################################################
 function _lockCheck() {
 	if [[ -f "/install/.install.lock" ]]; then
@@ -138,32 +102,25 @@ function _lockCheck() {
 		_error "Exiting..."
 		exit 1
 	fi
+	if [[ ! -f "/install/$APP_LOCK" ]]; then
+		_error "${APP_TITLE} haven't installed ..."
+		exit 1
+	fi
 }
 function _setLock() {
 	echo "${APP_TITLE}" >/install/.install.lock
 }
 function _lockCleanup() {
-	echo "$APP_TITLE Install Complete!
-
-
-Close this dialog box to refresh your browser" >>"${OUTTO}" 2>&1
 	rm -f /install/.install.lock
 }
 
-function _installInfo() {
+function _updateInfo() {
 	_print "
-$APP_TITLE will now be installed.
+$APP_TITLE will now be updated.
 
 This process may take a few minutes
 Please wait until the process is completed
 "
-}
-
-function _installAddSources() {
-	_info "Adding additional keys and sources ${APP_TITLE}..."
-	#curl -sL https://example.ppa/something.key | sudo apt-key add - >/dev/null 2>&1
-	#echo "deb https://example.ppa/ubuntu CODENAME stable" | sudo tee /etc/apt/sources.list.d/app.list >/dev/null 2>&1
-	_success "Keys and sources added."
 }
 
 function _installSystemUpdates() {
@@ -210,41 +167,109 @@ function _installDepends() {
 	fi
 }
 
-function _installApp() {
-	_info "Building ${APP_TITLE}..."
+function _updateApp() {
+	# remove old flexget
+	_info "Removing old ${APP_TITLE}..."
+	_excute "systemctl stop ${APP_SERVICE}@${username}"
+	su ${username} -c 'python2 -m pip uninstall flexget -y' >>"${OUTTO}" 2>&1
+	_success "${APP_TITLE} removed."
 
+	# install flexget via pip3
+	_installSystemUpdates
+	if [[ "$CODENAME" =~ ("xenial"|"stretch") ]]; then
+		APP_BASEDEPS="build-essential zlib1g-dev libncurses5-dev libgdbm-dev libnss3-dev libssl-dev libreadline-dev libffi-dev wget libsqlite3-dev"
+		_installDepends
+		_info "Compiling Python 3.7 ..."
+		cd /tmp
+		wget -q -O Python-3.7.6.tar.xz https://www.python.org/ftp/python/3.7.6/Python-3.7.6.tar.xz
+		tar -xf Python-3.7.6.tar.xz
+		cd Python-3.7.6
+		_excute "./configure"
+		_excute "make -j$(nproc)"
+		_excute "make altinstall"
+		_excute "update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.5 1"
+		_excute "update-alternatives --install /usr/bin/python3 python3 /usr/local/bin/python3.7 2"
+		rm -rf {Python-3.7.6.tar.xz,Python-3.7.6}
+		if [[ ! -f /usr/local/lib/python3.7/site-packages/lsb_release.py ]]; then
+			ln -s /usr/lib/python3/dist-packages/lsb_release.py /usr/local/lib/python3.7/site-packages/lsb_release.py
+		fi
+		_success "Python 3.7 installed"
+	else
+		_installDepends
+	fi
+
+	_info "Building ${APP_TITLE}..."
+	# Install for single user
+	cd /tmp
+	wget -q -O get-pip.py https://bootstrap.pypa.io/get-pip.py
+	_excute 'python3 get-pip.py --force-reinstall'
+	_excute 'pip3 install --upgrade setuptools'
+	_excute 'pip3 install --upgrade pyopenssl'
+	_excute 'pip3 install --upgrade cryptography'
+	#su ${username} -c 'pip3 install --user flexget' >>"${OUTTO}" 2>&1
+	#temporarily lock the version
+	su ${username} -c 'pip3 install --user flexget==3.0.31' >>"${OUTTO}" 2>&1
+	if [[ -f /install/.transmission.lock ]]; then
+		_excute 'pip3 install transmissionrpc'
+	fi
+	_reconfigureApp
+	_excute "systemctl start ${APP_SERVICE}@${username}"
 	_success "${APP_TITLE} Built."
 }
 
-function _configureApp() {
+function _reconfigureApp() {
 	_info "Configuring ${APP_TITLE}..."
-
+	pypath=$(su ${username} -c 'python3 -m site --user-site')
+	mkdir -p /tmp/
+	cat >/tmp/flexget-user-passwd.patch <<'EOF'
+diff -Nur '--exclude=.git' '--exclude=.vs' flexget/webserver.py flexget-patched/webserver.py
+--- flexget/webserver.py	2019-07-02 18:07:23.109855300 +0200
++++ flexget-patched/webserver.py	2019-07-02 20:44:50.134619000 +0200
+@@ -232,7 +232,7 @@
+ 
+ 
+ @with_session
+-def get_user(username='flexget', session=None):
++def get_user(username='replace', session=None):
+     user = session.query(User).filter(User.name == username).first()
+     if not user:
+         user = User()
+@@ -242,8 +242,9 @@
+ 
+ 
+ @with_session
+-def change_password(username='flexget', password='', session=None):
++def change_password(username='replace', password='', session=None):
+     check = zxcvbn.zxcvbn(password, user_inputs=[username])
++    check['score'] = 4
+     if check['score'] < 3:
+         warning = check['feedback']['warning']
+         suggestions = ' '.join(check['feedback']['suggestions'])
+@@ -260,7 +261,7 @@
+ 
+ 
+ @with_session
+-def generate_token(username='flexget', session=None):
++def generate_token(username='replace', session=None):
+     user = get_user(username=username, session=session)
+     user.token = generate_key()
+     session.commit()
+EOF
+	sed -i "s/username='replace'/username='${username}'/g" /tmp/flexget-user-passwd.patch
+	patch -p1 -d ${pypath}/flexget/ </tmp/flexget-user-passwd.patch >>"${OUTTO}" 2>&1
+	su ${username} -c "python3 -m compileall ${pypath}/flexget/webserver.py" >>"${OUTTO}" 2>&1
+	rm -rf /tmp/flexget-user-passwd.patch
+	sed -i "s/\\\'flexget\\\'/\\\'\\\'/g" ${pypath}/flexget/ui/v1/app/scripts/app.js
 	_success "${APP_TITLE} configured."
-}
-
-function _installAppLock() {
-	_info "Configuring ${APP_TITLE} lock..."
-
-	_success "${APP_TITLE} lock configured."
-}
-
-function _installAppStart() {
-	_info "Starting ${APP_TITLE}..."
-
-	_success "${APP_TITLE} started."
 }
 
 #################################################################################
 # OPT GENERATOR
 #################################################################################
-ARGS=$(getopt -a -o ghl:u:v: -l gui,help,log:,user:,version: -- "$@")
+ARGS=$(getopt -a -o hl:u: -l help,log:,user: -- "$@")
 eval set -- "${ARGS}"
 while true; do
 	case "$1" in
-	-g | --gui)
-		_menuinstall
-		break
-		;;
 	-h | --help)
 		_usage
 		exit 1
@@ -255,10 +280,6 @@ while true; do
 		;;
 	-u | --user)
 		username="$2"
-		shift
-		;;
-	-v | --version)
-		version="$2"
 		shift
 		;;
 	--)
@@ -274,12 +295,6 @@ done
 #################################################################################
 _lockCheck
 _setLock
-_installInfo
-_installAddSources
-_installSystemUpdates
-_installDepends
-_installApp
-_configureApp
-_installAppLock
-_installAppStart
+_updateInfo
+_updateApp
 _lockCleanup

@@ -36,7 +36,7 @@ $L['PLUGINS'] = '插件';
 // quick help menu tab
 $L['HELP_COMMANDS'] = '帮助命令 & 更多';
 $L['QUICK_SYSTEM_TIPS'] = '快速系统提示';
-$L['SYS_UPGRADE_TXT'] = '使用此命令升级 QuickBox Lite 系统.';
+$L['SYS_UPGRADE_TXT'] = '使用此命令升级 QuickBox ARM 系统.';
 $L['SET_LANG_TXT'] = '使用此命令设置仪表盘语言.';
 $L['CHANGEINTERFACE_TXT'] = '使用此命令设置仪表盘统计的网口.';
 $L['CLEAN_MEM_TXT'] = '如果你决定清除系统的缓存, 请以root身份使用上述命令';

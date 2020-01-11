@@ -36,7 +36,7 @@ $L['PLUGINS'] = 'Plugins';
 // quick help menu tab
 $L['HELP_COMMANDS'] = 'Hilfsbefehle & Mehr';
 $L['QUICK_SYSTEM_TIPS'] = 'Quick System Tipps';
-$L['SYS_UPGRADE_TXT'] = 'Führe diesen Befehl via SSH aus, um Ihr QuickBox Lite-System zu aktualisieren.';
+$L['SYS_UPGRADE_TXT'] = 'Führe diesen Befehl via SSH aus, um Ihr QuickBox ARM-System zu aktualisieren.';
 $L['SET_LANG_TXT'] = 'Führe diesen Befehl via SSH aus, um die Spreche der Dashboard einzurichten.';
 $L['CLEAN_MEM_TXT'] = 'Führe den oben genannten Befehl als root aus, wenn du den physikalischen Cache-Speicher deines Systems löschen möchtest.';
 $L['CLEAN_LOG_TXT'] = 'Führe diesen Befehl via SSH aus, um die Logs zu löschen.';
