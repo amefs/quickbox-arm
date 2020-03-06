@@ -47,18 +47,23 @@ function _excute() {
 }
 function _print() {
 	printf "${_norm}%s${_norm}\n" "$@"
+	printf "%s\n" "$@" >>"${OUTTO}"
 }
 function _info() {
 	printf "${_cyan}➜ %s${_norm}\n" "$@"
+	printf ">> Info: %s\n" "$@" >>"${OUTTO}"
 }
 function _success() {
 	printf "${_green}✓ %s${_norm}\n" "$@"
+	printf ">> Success: %s\n" "$@" >>"${OUTTO}"
 }
 function _warning() {
 	printf "${_tan}⚠ %s${_norm}\n" "$@"
+	printf ">> Warning: %s\n" "$@" >>"${OUTTO}"
 }
 function _error() {
 	printf "${_red}✗ %s${_norm}\n" "$@"
+	printf ">> Error: %s\n" "$@" >>"${OUTTO}"
 }
 
 #################################################################################
@@ -69,7 +74,7 @@ APP_NAME="flexget"
 APP_SERVICE="flexget"
 
 OUTTO=/srv/dashboard/db/output.log
-username=$(cat .admin.info | cut -d: -f1)
+username=$(cat /root/.admin.info | cut -d: -f1)
 
 ################################################################################
 # SCRIPT FUNCTIONS
@@ -142,6 +147,14 @@ function _removeApp() {
 	rm -f /etc/nginx/apps/${username}.flexget.conf
 	su ${username} -c 'python2 -m pip uninstall flexget -y' >>"${OUTTO}" 2>&1
 	su ${username} -c 'python3 -m pip uninstall flexget -y' >>"${OUTTO}" 2>&1
+	if [[ -f /install/.transmission.lock ]]; then
+		_excute 'python2 -m pip uninstall transmissionrpc -y'
+		_excute 'python3 -m pip uninstall transmissionrpc -y'
+	fi
+	if [[ -f /install/.deluge.lock ]]; then
+		_excute 'python2 -m pip uninstall deluge-client -y'
+		_excute 'python3 -m pip uninstall deluge-client -y'
+	fi
 	rm -f /install/${username}.${APP_NAME}.port
 	_success "${APP_TITLE} removed."
 }

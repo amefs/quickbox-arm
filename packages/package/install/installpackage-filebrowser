@@ -52,18 +52,23 @@ function _excute() {
 }
 function _print() {
 	printf "${_norm}%s${_norm}\n" "$@"
+	printf "%s\n" "$@" >>"${OUTTO}"
 }
 function _info() {
 	printf "${_cyan}➜ %s${_norm}\n" "$@"
+	printf ">> Info: %s\n" "$@" >>"${OUTTO}"
 }
 function _success() {
 	printf "${_green}✓ %s${_norm}\n" "$@"
+	printf ">> Success: %s\n" "$@" >>"${OUTTO}"
 }
 function _warning() {
 	printf "${_tan}⚠ %s${_norm}\n" "$@"
+	printf ">> Warning: %s\n" "$@" >>"${OUTTO}"
 }
 function _error() {
 	printf "${_red}✗ %s${_norm}\n" "$@"
+	printf ">> Error: %s\n" "$@" >>"${OUTTO}"
 }
 
 #################################################################################
@@ -183,7 +188,7 @@ function _installDepends() {
 function _installApp() {
 	_info "Building ${APP_TITLE}..."
 	cd /tmp || exit 1
-	curl -fsSL https://filebrowser.xyz/get.sh | bash >/dev/null 2>&1
+	/usr/local/bin/quickbox/system/auxiliary/getfb.sh >/dev/null 2>&1
 	_success "${APP_TITLE} Built."
 }
 

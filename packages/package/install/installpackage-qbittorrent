@@ -52,18 +52,23 @@ function _excute() {
 }
 function _print() {
 	printf "${_norm}%s${_norm}\n" "$@"
+	printf "%s\n" "$@" >>"${OUTTO}"
 }
 function _info() {
 	printf "${_cyan}➜ %s${_norm}\n" "$@"
+	printf ">> Info: %s\n" "$@" >>"${OUTTO}"
 }
 function _success() {
 	printf "${_green}✓ %s${_norm}\n" "$@"
+	printf ">> Success: %s\n" "$@" >>"${OUTTO}"
 }
 function _warning() {
 	printf "${_tan}⚠ %s${_norm}\n" "$@"
+	printf ">> Warning: %s\n" "$@" >>"${OUTTO}"
 }
 function _error() {
 	printf "${_red}✗ %s${_norm}\n" "$@"
+	printf ">> Error: %s\n" "$@" >>"${OUTTO}"
 }
 
 function _version_gt() { test "$(printf '%s\n' "$@" | sort -V | head -n 1)" != "$1"; }
@@ -81,7 +86,8 @@ APP_WEB_PORT_HIGH="15200"
 
 APP_LOCK=.$APP_NAME.lock
 OUTTO=/srv/dashboard/db/output.log
-deb_version_list=['4.1.7','4.1.8','4.1.9.1','4.2.0','4.2.1']
+qbit_version_list=['4.1.7','4.1.8','4.1.9','4.1.9.1','4.2.0','4.2.1']
+libt_version_list=['1.1.13','1.1.14']
 qbitversion=4.2.1
 libtversion=1.1.13
 
@@ -228,21 +234,21 @@ function _installFpm() {
 function _installApp() {
 	_info "Building ${APP_TITLE}..."
 	# Libtorrent
-	if [[ ${libtversion} == 1.1.13 && ! -f /install/.libtorrent-rasterbar.lock ]]; then
+	if [[ ${libt_version_list[*]} =~ ${libtversion} && ! -f /install/.libtorrent-rasterbar.lock ]]; then
 		_info "Installing Libtorrent..."
 		cd /tmp || exit 1
 		if [[ ! -f /install/.libtorrent-rasterbar9.lock ]]; then
-			LIBTBIN=libtorrent-rasterbar9_1.1.13-1build1_armhf.deb
+			LIBTBIN=libtorrent-rasterbar9_${libtversion}-1build1_armhf.deb
 			wget -q -O ${LIBTBIN} https://sourceforge.net/projects/seedbox-software-for-linux/files/${CODENAME}/binary-armhf/libtorrent-rasterbar/${LIBTBIN}/download
 			_excute "apt install -y /tmp/${LIBTBIN}"
-			LIBTDEVBIN=libtorrent-rasterbar-dev_1.1.13-1build1_armhf.deb
+			LIBTDEVBIN=libtorrent-rasterbar-dev_${libtversion}-1build1_armhf.deb
 			wget -q -O ${LIBTDEVBIN} https://sourceforge.net/projects/seedbox-software-for-linux/files/${CODENAME}/binary-armhf/libtorrent-rasterbar/${LIBTBIN}/download
 			_excute "apt install -y /tmp/${LIBTDEVBIN}"
 			rm -rf {${LIBTBIN},${LIBTDEVBIN}}
 			_excute "ldconfig"
 		fi
 		touch /install/.libtorrent-rasterbar9.lock
-	elif [[ ${libtversion} != 1.1.13 && ! -f /install/.libtorrent-rasterbar.lock && ! -f /install/.libtorrent-rasterbar9.lock ]]; then
+	elif [[ ! ${libt_version_list[*]} =~ ${libtversion} && ! -f /install/.libtorrent-rasterbar.lock && ! -f /install/.libtorrent-rasterbar9.lock ]]; then
 		cd /tmp || exit 1
 		# prepare package toolchain
 		APP_BASEDEPS="build-essential libgl1-mesa-dev libssl-dev libboost-dev libboost-system-dev libboost-chrono-dev libboost-random-dev libboost-python-dev python python-dev python3 python3-dev pkg-config automake libtool git screen libgeoip-dev zlib1g-dev"
@@ -317,7 +323,7 @@ function _installApp() {
 	fi
 
 	# qBittorrent
-	if [[ ${deb_version_list[*]} =~ ${qbitversion} && ! -f /install/.libtorrent-rasterbar.lock ]]; then
+	if [[ ${qbit_version_list[*]} =~ ${qbitversion} && ! -f /install/.libtorrent-rasterbar.lock ]]; then
 		cd /tmp
 		if [[ ! -f /install/.deluge.lock ]]; then
 			LIBTBIN=libtorrent-rasterbar9_${libtversion}-1build1_armhf.deb
@@ -344,6 +350,18 @@ function _installApp() {
 	else
 		# prepare package toolchain
 		APP_BASEDEPS="build-essential libgl1-mesa-dev libssl-dev libboost-dev libboost-system-dev libboost-chrono-dev libboost-random-dev libboost-python-dev python python-dev python3 python3-dev pkg-config automake libtool git screen libgeoip-dev qtbase5-dev qttools5-dev-tools libqt5svg5-dev zlib1g-dev"
+		_info "Adding additional keys and sources ${APP_TITLE}..."
+		if [ $CODENAME == "xenial" ] && $(grep -qv 'xenial-updates'< /etc/apt/sources.list); then
+			cat > /etc/apt/sources.list.d/xenial-updates.list <<LIST
+deb http://us.archive.ubuntu.com/ubuntu/ xenial-updates main
+LIST
+		elif [ $CODENAME == "stretch" ] && $(grep -qv 'stretch-backports'< /etc/apt/sources.list); then
+			cat > /etc/apt/sources.list.d/stretch-backports.list <<LIST
+deb http://deb.debian.org/debian stretch-backports main	
+LIST
+		fi
+		_success "Keys and sources added."
+		DEBIAN_FRONTEND=noninteractive apt-get -yqq -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" update >/dev/null 2>&1
 		_installDepends
 		_installFpm
 		if (_version_gt ${qbitversion} 4.1.9.1); then
@@ -462,7 +480,7 @@ WebUI\AuthSubnetWhitelist=@Invalid()
 WebUI\AuthSubnetWhitelistEnabled=false
 WebUI\HTTPS\Enabled=false
 WebUI\LocalHostAuth=false
-WebUI\Password_PBKDF2='@ByteArray(${pbkdf2pass})'
+WebUI\Password_PBKDF2="@ByteArray(${pbkdf2pass})"
 WebUI\Port=${PORT}
 WebUI\ServerDomains=*
 WebUI\UseUPnP=true

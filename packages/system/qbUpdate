@@ -32,18 +32,23 @@ function _excute() {
 }
 function _print() {
 	printf "${_norm}%s${_norm}\n" "$@"
+	printf "%s\n" "$@" >>"${OUTTO}"
 }
 function _info() {
 	printf "${_cyan}➜ %s${_norm}\n" "$@"
+	printf ">> Info: %s\n" "$@" >>"${OUTTO}"
 }
 function _success() {
 	printf "${_green}✓ %s${_norm}\n" "$@"
+	printf ">> Success: %s\n" "$@" >>"${OUTTO}"
 }
 function _warning() {
 	printf "${_tan}⚠ %s${_norm}\n" "$@"
+	printf ">> Warning: %s\n" "$@" >>"${OUTTO}"
 }
 function _error() {
 	printf "${_red}✗ %s${_norm}\n" "$@"
+	printf ">> Error: %s\n" "$@" >>"${OUTTO}"
 }
 #################################################################################
 # SCRIPT FUNCTIONS
@@ -146,6 +151,9 @@ function _updateskel() {
 
 function _updatedashboard() {
 	_info "Updating QuickBox dashboard..."
+	if (! grep -c 'location ^~ /db/master.txt' < /etc/nginx/apps/dashboard.conf > /dev/null); then
+		\cp -f ${local_setup_template}nginx/dashboard.conf.template /etc/nginx/apps/dashboard.conf
+	fi
 	cd /srv/dashboard || exit 1
 	_excute "rsync -aP --exclude=disk_data*.php --exclude=share.php --exclude=custom.menu.php --exclude=url.override.php --exclude=custom.css ${local_setup_dashboard}* /srv/dashboard"
 

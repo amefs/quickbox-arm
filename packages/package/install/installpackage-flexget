@@ -52,18 +52,23 @@ function _excute() {
 }
 function _print() {
 	printf "${_norm}%s${_norm}\n" "$@"
+	printf "%s\n" "$@" >>"${OUTTO}"
 }
 function _info() {
 	printf "${_cyan}➜ %s${_norm}\n" "$@"
+	printf ">> Info: %s\n" "$@" >>"${OUTTO}"
 }
 function _success() {
 	printf "${_green}✓ %s${_norm}\n" "$@"
+	printf ">> Success: %s\n" "$@" >>"${OUTTO}"
 }
 function _warning() {
 	printf "${_tan}⚠ %s${_norm}\n" "$@"
+	printf ">> Warning: %s\n" "$@" >>"${OUTTO}"
 }
 function _error() {
 	printf "${_red}✗ %s${_norm}\n" "$@"
+	printf ">> Error: %s\n" "$@" >>"${OUTTO}"
 }
 
 function _version_gt() { test "$(printf '%s\n' "$@" | sort -V | head -n 1)" != "$1"; }
@@ -185,10 +190,10 @@ function _installApp() {
 	# Install for single user
 	qbit_version=0
 	de_version=0
-	if (dpkg-query -W -f='${Status}' qbittorrent-nox 2>/dev/null | grep -c "ok installed"); then
+	if (dpkg-query -W -f='${Status}' qbittorrent-nox 2>/dev/null | grep -c "ok installed" >/dev/null); then
 		qbit_version=$(dpkg -s qbittorrent-nox | grep '^Version:' | grep -Eo "[0-9.]+" | head -n1)
 	fi
-	if (dpkg-query -W -f='${Status}' deluged 2>/dev/null | grep -c "ok installed"); then
+	if (dpkg-query -W -f='${Status}' deluged 2>/dev/null | grep -c "ok installed" >/dev/null); then
 		de_version=$(dpkg -s deluged | grep '^Version:' | grep -Eo "[0-9.]+" | head -n1)
 	fi
 	if (_version_gt ${de_version} 2.0) || (_version_gt ${qbit_version} 4.1.9.1); then
@@ -197,7 +202,7 @@ function _installApp() {
 			apt-key adv --recv-keys --keyserver hkp://keyserver.ubuntu.com:80 F23C5A6CF475977595C89F51BA6932366A755776 >/dev/null 2>&1
 			LC_ALL=en_US.UTF-8 add-apt-repository ppa:deadsnakes/ppa -y >/dev/null 2>&1
 			DEBIAN_FRONTEND=noninteractive apt-get -yqq -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" update >/dev/null 2>&1
-			APP_BASEDEPS="python3.6"
+			APP_BASEDEPS="python3.6 python3.6-gdbm"
 			_installDepends
 			_excute "update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.5 1"
 			_excute "update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.6 2"
@@ -238,6 +243,9 @@ function _installApp() {
 		if [[ -f /install/.transmission.lock ]]; then
 			_excute 'pip3 install transmissionrpc'
 		fi
+		if [[ -f /install/.deluge.lock ]]; then
+			_excute 'pip3 install deluge-client'
+		fi
 	else
 		APP_BASEDEPS="python-pip python-setuptools"
 		_installDepends
@@ -248,6 +256,9 @@ function _installApp() {
 		su ${username} -c 'pip2 install --user flexget' >>"${OUTTO}" 2>&1
 		if [[ -f /install/.transmission.lock ]]; then
 			_excute 'pip2 install transmissionrpc'
+		fi
+		if [[ -f /install/.deluge.lock ]]; then
+			_excute 'pip2 install deluge-client'
 		fi
 	fi
 	_success "${APP_TITLE} Built."

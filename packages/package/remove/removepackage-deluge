@@ -47,18 +47,23 @@ function _excute() {
 }
 function _print() {
 	printf "${_norm}%s${_norm}\n" "$@"
+	printf "%s\n" "$@" >>"${OUTTO}"
 }
 function _info() {
 	printf "${_cyan}➜ %s${_norm}\n" "$@"
+	printf ">> Info: %s\n" "$@" >>"${OUTTO}"
 }
 function _success() {
 	printf "${_green}✓ %s${_norm}\n" "$@"
+	printf ">> Success: %s\n" "$@" >>"${OUTTO}"
 }
 function _warning() {
 	printf "${_tan}⚠ %s${_norm}\n" "$@"
+	printf ">> Warning: %s\n" "$@" >>"${OUTTO}"
 }
 function _error() {
 	printf "${_red}✗ %s${_norm}\n" "$@"
+	printf ">> Error: %s\n" "$@" >>"${OUTTO}"
 }
 
 #################################################################################
@@ -156,6 +161,8 @@ function _removeApp() {
 		if [[ -f /install/.${username}.flexget.lock ]]; then
 			DPORT=$(cat /install/${username}.deluged.port)
 			sed -i "s/${DPORT}/DEPORT/g" /home/${username}/.config/flexget/config.yml
+			_excute 'python2 -m pip uninstall deluge-client -y'
+			_excute 'python3 -m pip uninstall deluge-client -y'
 		fi
 		rm -rf /home/${username}/dwatch
 		rm -rf /home/${username}/torrents/deluge
