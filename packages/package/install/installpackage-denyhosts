@@ -42,7 +42,7 @@ _green=$(tput setaf 2)
 _tan=$(tput setaf 3)
 _cyan=$(tput setaf 6)
 
-function _excute() {
+function _execute() {
 	($1 >>"${OUTTO}" 2>&1)
 }
 function _print() {
@@ -72,7 +72,7 @@ function _error() {
 APP_TITLE="Denyhosts"
 APP_NAME="denyhosts"
 APP_SERVICE="denyhosts"
-APP_BASEDEPS="python rsyslog python-ipaddr"
+APP_BASEDEPS="python rsyslog"
 
 APP_LOCK=.$APP_NAME.lock
 OUTTO=/srv/dashboard/db/output.log
@@ -149,7 +149,7 @@ function _installSystemUpdates() {
 			for l in ${locks}; do
 				rm -rf ${l}
 			done
-			_excute "dpkg --configure -a"
+			_execute "dpkg --configure -a"
 			DEBIAN_FRONTEND=noninteractive apt-get -yqq -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" update >/dev/null 2>&1
 			DEBIAN_FRONTEND=noninteractive apt-get -yqq -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" upgrade >/dev/null 2>&1
 		fi
@@ -169,7 +169,7 @@ function _installDepends() {
 	local DEPLIST="${APP_BASEDEPS}"
 	for depend in $DEPLIST; do
 		_info "Installing ${depend}... "
-		_excute "apt-get -y --allow-unauthenticated -f install ${depend}" || { _error "Could not install ${depend}." && dependError=1; }
+		_execute "apt-get -y --allow-unauthenticated -f install ${depend}" || { _error "Could not install ${depend}." && dependError=1; }
 	done
 	if [[ $dependError != "1" ]]; then
 		_success "${APP_TITLE} dependencies installed."
@@ -181,14 +181,19 @@ function _installDepends() {
 
 function _installApp() {
 	_info "Building ${APP_TITLE}..."
-	_excute "/etc/init.d/rsyslog restart"
-	cat /dev/null >/var/log/auth.log
 	cd /tmp || exit 1
+	_execute "wget -q -O get-pip.py https://bootstrap.pypa.io/get-pip.py"
+	_execute "python2 get-pip.py --force-reinstall"
+	_execute "python2 -m pip install --upgrade pip"
+	_execute "python2 -m pip install --upgrade ipaddr"
+	rm -f get-pip.py
+	_execute "/etc/init.d/rsyslog restart"
+	cat /dev/null >/var/log/auth.log
 	mkdir -p /tmp/denyhosts
 	wget -t2 -T5 -q -N -O denyhosts-3.1.tar.gz http://downloads.sourceforge.net/project/denyhost/denyhost-3.1/denyhosts-3.1.tar.gz
-	_excute "tar zxvf denyhosts-3.1.tar.gz -C /tmp/denyhosts --strip-components=1"
+	_execute "tar zxvf denyhosts-3.1.tar.gz -C /tmp/denyhosts --strip-components=1"
 	cd /tmp/denyhosts || exit 1
-	_excute "python setup.py install --record /install/.denyhosts.install.record --install-layout=deb"
+	_execute "python setup.py install --record /install/.denyhosts.install.record --install-layout=deb"
 	_success "${APP_TITLE} Built."
 }
 
@@ -214,7 +219,7 @@ Restart=on-failure
 [Install]
 WantedBy=multi-user.target
 EOF
-	_excute "systemctl daemon-reload"
+	_execute "systemctl daemon-reload"
 	_success "${APP_TITLE} configured."
 }
 
@@ -226,15 +231,19 @@ function _installAppLock() {
 
 function _installAppStart() {
 	_info "Starting ${APP_TITLE}..."
-	_excute "systemctl start ${APP_SERVICE}.service"
-	_excute "systemctl enable ${APP_SERVICE}.service"
+	_execute "systemctl start ${APP_SERVICE}.service"
+	_execute "systemctl enable ${APP_SERVICE}.service"
 	_success "${APP_TITLE} started."
 }
 
 #################################################################################
 # OPT GENERATOR
 #################################################################################
-ARGS=$(getopt -a -o hl: -l help,log: -- "$@")
+if ! ARGS=$(getopt -a -o hl: -l help,log: -- "$@")
+then
+    _usage
+    exit 1
+fi
 eval set -- "${ARGS}"
 while true; do
 	case "$1" in

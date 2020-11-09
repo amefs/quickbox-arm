@@ -1018,3 +1018,7 @@ export NVM_DIR="/root/.nvm"
 if [ -f ~/.bash_aliases ]; then
     . ~/.bash_aliases # --> Read ~/.bash_aliases, if present.
 fi
+
+if [ -f ~/.bash_pyenv ]; then
+    . ~/.bash_pyenv # --> Read ~/.bash_pyenv, if present.
+fi

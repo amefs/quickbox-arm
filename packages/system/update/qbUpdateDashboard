@@ -1,0 +1,58 @@
+function _execute() {
+	($1 >>"${OUTTO}" 2>&1)
+}
+function _print() {
+	printf "${_norm}%s${_norm}\n" "$@"
+	printf "%s\n" "$@" >>"${OUTTO}"
+}
+function _info() {
+	printf "${_cyan}➜ %s${_norm}\n" "$@"
+	printf ">> Info: %s\n" "$@" >>"${OUTTO}"
+}
+function _success() {
+	printf "${_green}✓ %s${_norm}\n" "$@"
+	printf ">> Success: %s\n" "$@" >>"${OUTTO}"
+}
+function _warning() {
+	printf "${_tan}⚠ %s${_norm}\n" "$@"
+	printf ">> Warning: %s\n" "$@" >>"${OUTTO}"
+}
+function _error() {
+	printf "${_red}✗ %s${_norm}\n" "$@"
+	printf ">> Error: %s\n" "$@" >>"${OUTTO}"
+}
+
+function _updatedashboard() {
+	_info "Updating QuickBox dashboard..."
+	# Update dashboard config
+	cd /srv/dashboard || exit 1
+	_execute "rsync -aP --delete --exclude=output.log  --exclude=interface.txt --exclude=master.txt --exclude=.smoked.lock --exclude=.defaulted.lock --exclude=share.php --exclude=custom.menu.php --exclude=url.override.php --exclude=custom.css ${local_setup_dashboard}* /srv/dashboard"
+
+	if [[ $(vnstat -v | grep -Eo "[0-9.]+" | cut -d . -f1) == "1" ]]; then
+		\cp -f /srv/dashboard/widgets/vnstat-raw.php /srv/dashboard/widgets/vnstat.php
+	elif [[ $(vnstat -v | grep -Eo "[0-9.]+" | cut -d . -f1) == "2" ]]; then
+		\cp -f /srv/dashboard/widgets/vnstat-json.php /srv/dashboard/widgets/vnstat.php
+	fi
+
+	IFACE=$(cat /srv/dashboard/db/interface.txt)
+	sed -i "s/INETFACE/${IFACE}/g" /srv/dashboard/widgets/stat.php
+	sed -i "s/INETFACE/${IFACE}/g" /srv/dashboard/widgets/data.php
+	sed -i "s/INETFACE/${IFACE}/g" /srv/dashboard/widgets/bw_tables.php
+	sed -i "s/INETFACE/${IFACE}/g" /srv/dashboard/inc/config.php
+	if [[ -f /srv/dashboard/db/.smoked.lock ]]; then
+		_execute "bash /usr/local/bin/quickbox/system/theme/themeSelect-smoked"
+	elif [[ -f /srv/dashboard/db/.defaulted.lock ]]; then
+		_execute "bash /usr/local/bin/quickbox/system/theme/themeSelect-defaulted"
+	else
+		_execute "bash /usr/local/bin/quickbox/system/theme/themeSelect-smoked"
+	fi
+	chown -R www-data:www-data /srv/dashboard
+	_success "QuickBox dashboard updated"
+}
+
+function _updatelanguage() {
+	_info "Updating QuickBox language..."
+	dashlang=$(find /install -type f | grep -e "lang.*.lock" | cut -d "." -f 2)
+	bash /usr/local/bin/quickbox/system/box lang $dashlang
+	_success "QuickBox language updated"
+}

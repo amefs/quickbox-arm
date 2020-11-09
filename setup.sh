@@ -54,6 +54,25 @@ disabledentry=magenta,
 '
 }
 
+_norm=$(tput sgr0)
+_red=$(tput setaf 1)
+_green=$(tput setaf 2)
+_tan=$(tput setaf 3)
+_cyan=$(tput setaf 6)
+
+function _info() {
+	printf "${_cyan}➜ %s${_norm}\n" "$@"
+}
+function _success() {
+	printf "${_green}✓ %s${_norm}\n" "$@"
+}
+function _warning() {
+	printf "${_tan}⚠ %s${_norm}\n" "$@"
+}
+function _error() {
+	printf "${_red}✗ %s${_norm}\n" "$@"
+}
+
 function _init() {
 
 	_defaultcolor
@@ -89,11 +108,11 @@ function _init() {
 		DEBIAN_FRONTEND=noninteractive apt-get -qq -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" update >/dev/null 2>&1
 		echo -e "XXX\n10\nPreparing scripts... \nXXX"
 		if [[ $DISTRO == Ubuntu && $CODENAME == xenial ]]; then
-			apt-get -y install git curl dos2unix python-minimal apt-transport-https software-properties-common dnsutils unzip >/dev/null 2>&1
+			apt-get -y install git curl wget dos2unix python-minimal apt-transport-https software-properties-common dnsutils unzip >/dev/null 2>&1
 		elif [[ $DISTRO == Ubuntu && $CODENAME == bionic ]]; then
-			apt-get -y install git curl dos2unix python apt-transport-https software-properties-common dnsutils unzip >/dev/null 2>&1
+			apt-get -y install git curl wget dos2unix python apt-transport-https software-properties-common dnsutils unzip >/dev/null 2>&1
 		elif [[ $DISTRO == Debian ]]; then
-			apt-get -y install git curl dos2unix python apt-transport-https software-properties-common gnupg2 ca-certificates dnsutils unzip >/dev/null 2>&1
+			apt-get -y install git curl wget dos2unix python apt-transport-https software-properties-common gnupg2 ca-certificates dnsutils unzip >/dev/null 2>&1
 		fi
 		echo -e "XXX\n20\nPreparing scripts... \nXXX"
 		dos2unix $(find ${local_prefix} -type f) >/dev/null 2>&1
@@ -158,11 +177,13 @@ function _selectlang() {
 		source ${local_lang}en.lang
 		echo 'LANGUAGE="en_US.UTF-8"' >>/etc/default/locale
 		echo 'LC_ALL="en_US.UTF-8"' >>/etc/default/locale
+		uilang="en"
 		;;
 	"Chinese Simpified")
 		source ${local_lang}zh-cn.lang
 		echo 'LANGUAGE="zh_CN.UTF-8"' >>/etc/default/locale
 		echo 'LC_ALL="zh_CN.UTF-8"' >>/etc/default/locale
+		uilang="zh"
 		;;
 	esac
 	DEBIAN_FRONTEND=noninteractive dpkg-reconfigure locales >/dev/null 2>&1
@@ -178,12 +199,12 @@ function _checkroot() {
 }
 
 function _checkdistro() {
-	if [[ ! "$DISTRO" =~ ("Ubuntu"|"Debian"|"Raspbian") ]]; then
+	if [[ ! "$DISTRO" =~ ("Ubuntu"|"Debian") ]]; then
 		_errorcolor
 		whiptail --title "$ERROR_TITLE_OS" --msgbox "${ERROR_TEXT_DESTRO_1}${DISTRO}${ERROR_TEXT_DESTRO_2}" --ok-button "$BUTTON_OK" 8 72
 		_defaultcolor
 		exit 1
-	elif [[ ! "$CODENAME" =~ ("xenial"|"bionic"|"stretch"|"buster") ]]; then
+	elif [[ ! "$CODENAME" =~ ("xenial"|"bionic"|"stretch"|"buster"|"focal") ]]; then
 		_errorcolor
 		whiptail --title "$ERROR_TITLE_OS" --msgbox "${ERROR_TEXT_CODENAME_1}${DISTRO}${ERROR_TEXT_CODENAME_2}" --ok-button "$BUTTON_OK" 8 72
 		_defaultcolor
@@ -221,8 +242,10 @@ function _askhostname() {
 
 function _chhostname() {
 	if [[ $hostname != "" ]]; then
-		echo "$hostname" >/etc/hostname
-		echo "127.0.0.1 $hostname" >/etc/hosts
+		old_hostname=$(cat /etc/hostname)
+		echo "${hostname}" >/etc/hostname
+		sed -i "s/127.0.1.1\s*${old_hostname}/127.0.1.1	${hostname}/g" /etc/hosts >>"${OUTTO}" 2>&1
+		sed -i "/127.0.0.1\s*localhost/a 127.0.0.1	${hostname}" /etc/hosts >>"${OUTTO}" 2>&1
 	fi
 }
 
@@ -231,11 +254,19 @@ function _askchport() {
 	while [[ $chport == "" ]]; do
 		chport=$(
 			whiptail --title "$INFO_TITLE_SSH" --radiolist \
-			"$INFO_TEXT_SSH" 12 40 4 \
-			"22" "$CHOICE_TEXT_SSH_1" off \
-			"4747" "$CHOICE_TEXT_SSH_2" on \
-			--ok-button "$BUTTON_OK" --cancel-button "$BUTTON_CANCLE" 3>&1 1>&2 2>&3
+				"$INFO_TEXT_SSH" 12 40 4 \
+				"default" "$CHOICE_TEXT_SSH_1" off \
+				"4747" "$CHOICE_TEXT_SSH_2" on \
+				"other" "$CHOICE_TEXT_SSH_3" off \
+				--ok-button "$BUTTON_OK" --cancel-button "$BUTTON_CANCLE" 3>&1 1>&2 2>&3
 		)
+		if [[ $chport == "other" ]]; then
+			port=$(whiptail --title "$INFO_TITLE_SSH" --inputbox "$INPUT_TEXT_SSH" 10 72 --ok-button "$BUTTON_OK" --cancel-button "$BUTTON_CANCLE" 3>&1 1>&2 2>&3)
+			chport=$(echo "$port" | grep -P '^()([1-9]|[1-5]?[0-9]{2,4}|6[1-4][0-9]{3}|65[1-4][0-9]{2}|655[1-2][0-9]|6553[1-5])$')
+			if [[ $chport == "" ]]; then 
+				whiptail --title "$ERROR_TITLE_SSH" --msgbox "$ERROR_TEXT_SSH" --ok-button "$BUTTON_OK" 10 72 
+			fi
+		fi
 	done
 }
 
@@ -250,7 +281,7 @@ function _askusrname() {
 	local count=0
 	local valid=false
 	# https://github.com/Azure/azure-devops-utils
-	local reserved_names=['adm','admin','audio','backup','bin','cdrom','crontab','daemon','dialout','dip','disk','fax','floppy','fuse','games','gnats','irc','kmem','landscape','libuuid','list','lp','mail','man','messagebus','mlocate','netdev','news','nobody','nogroup','operator','plugdev','proxy','root','sasl','shadow','src','ssh','sshd','staff','sudo','sync','sys','syslog','tape','tty','users','utmp','uucp','video','voice','whoopsie','www-data']
+	local reserved_names=('adm' 'admin' 'audio' 'backup' 'bin' 'cdrom' 'crontab' 'daemon' 'dialout' 'dip' 'disk' 'fax' 'floppy' 'fuse' 'games' 'gnats' 'irc' 'kmem' 'landscape' 'libuuid' 'list' 'lp' 'mail' 'man' 'messagebus' 'mlocate' 'netdev' 'news' 'nobody' 'nogroup' 'operator' 'plugdev' 'proxy' 'root' 'sasl' 'shadow' 'src' 'ssh' 'sshd' 'staff' 'sudo' 'sync' 'sys' 'syslog' 'tape' 'tty' 'users' 'utmp' 'uucp' 'video' 'voice' 'whoopsie' 'www-data')
 	while [[ $valid == false ]]; do
 		username=$(whiptail --title "$INFO_TITLE_NAME" --inputbox "$INFO_TEXT_NAME" --ok-button "$BUTTON_OK" --cancel-button "$BUTTON_CANCLE" 8 72 3>&1 1>&2 2>&3)
 		# check username length
@@ -258,7 +289,7 @@ function _askusrname() {
 		# ensure vaild username
 		valid=$(echo "$username" | grep -P '^[a-z][-a-z0-9_]*')
 		_errorcolor
-		if [[ "$username" =~ ${reserved_names[*]} ]]; then
+		if $(echo "${reserved_names[@]}" | grep -wq "$username"); then
 			whiptail --title "$ERROR_TITLE_NAME" --msgbox "$ERROR_TEXT_NAME_1" --ok-button "$BUTTON_OK" 8 72
 			valid=false
 		elif [[ $count -lt 3 || $count -gt 32 ]]; then
@@ -296,14 +327,102 @@ function _askpasswd() {
 	done
 }
 
+function _cf() {
+	DOMAIN="deb.ezapi.net"
+	SUBFOLDER=""
+	SUFFIX=""
+}
+
+function _sf() {
+	DOMAIN="sourceforge.net"
+	SUBFOLDER="projects/seedbox-software-for-linux/files/"
+	SUFFIX="/download"
+}
+
+function _osdn() {
+	DOMAIN="osdn.dl.osdn.net"
+	SUBFOLDER="storage/g/s/se/seedbox-software-for-linux/"
+	SUFFIX=""
+}
+
+function _github() {
+	DOMAIN="raw.githubusercontent.com"
+	SUBFOLDER="amefs/quickbox-files/master/"
+	SUFFIX=""
+}
+
 function _skel() {
 	echo -e "XXX\n17\n$INFO_TEXT_PROGRESS_3_1\nXXX"
 	mkdir -p /etc/skel
 	cp -rf ${local_setup_template}skel /etc
-	cd /tmp || exit 1
-	while true; do
-		wget -q -O GeoLiteCity.dat.gz https://sourceforge.net/projects/seedbox-software-for-linux/files/all-platform/GeoLiteCity.dat.gz/download && break
-	done
+	# init download url
+	case "$cdn" in
+	"--with-cf")
+		_cf
+		echo "cf" > /install/.cdn.lock
+		wget -t3 -T20 -q -O GeoLiteCity.dat.gz https://${DOMAIN}/${SUBFOLDER}all-platform/GeoLiteCity.dat.gz${SUFFIX}
+		if [ $? -ne 0 ]; then
+			_sf
+			wget -t5 -T10 -q -O GeoLiteCity.dat.gz https://${DOMAIN}/${SUBFOLDER}all-platform/GeoLiteCity.dat.gz${SUFFIX}
+			if [ $? -ne 0 ]; then
+				_osdn
+				wget -t5 -T10 -q -O GeoLiteCity.dat.gz https://${DOMAIN}/${SUBFOLDER}all-platform/GeoLiteCity.dat.gz${SUFFIX}
+			fi
+		fi
+		;;
+	"--with-sf")
+		_sf
+		echo "cf" > /install/.cdn.lock
+		wget -t3 -T10 -q -O GeoLiteCity.dat.gz https://${DOMAIN}/${SUBFOLDER}all-platform/GeoLiteCity.dat.gz${SUFFIX}
+		if [ $? -ne 0 ]; then
+			_cf
+			wget -t5 -T20 -q -O GeoLiteCity.dat.gz https://${DOMAIN}/${SUBFOLDER}all-platform/GeoLiteCity.dat.gz${SUFFIX}
+			if [ $? -ne 0 ]; then
+				_osdn
+				wget -t5 -T10 -q -O GeoLiteCity.dat.gz https://${DOMAIN}/${SUBFOLDER}all-platform/GeoLiteCity.dat.gz${SUFFIX}
+			fi
+		fi
+		;;
+	"--with-osdn")
+		_osdn
+		echo "osdn" > /install/.cdn.lock
+		wget -t3 -T10 -q -O GeoLiteCity.dat.gz https://${DOMAIN}/${SUBFOLDER}all-platform/GeoLiteCity.dat.gz${SUFFIX}
+		if [ $? -ne 0 ]; then
+			_cf
+			wget -t5 -T20 -q -O GeoLiteCity.dat.gz https://${DOMAIN}/${SUBFOLDER}all-platform/GeoLiteCity.dat.gz${SUFFIX}
+			if [ $? -ne 0 ]; then
+				_sf
+				wget -t5 -T10 -q -O GeoLiteCity.dat.gz https://${DOMAIN}/${SUBFOLDER}all-platform/GeoLiteCity.dat.gz${SUFFIX}
+			fi
+		fi
+		;;
+	"--with-github")
+		_github
+		echo "github" > /install/.cdn.lock
+		wget -t3 -T10 -q -O GeoLiteCity.dat.gz https://${DOMAIN}/${SUBFOLDER}all-platform/GeoLiteCity.dat.gz${SUFFIX}
+		if [ $? -ne 0 ]; then
+			_cf
+			wget -t5 -T20 -q -O GeoLiteCity.dat.gz https://${DOMAIN}/${SUBFOLDER}all-platform/GeoLiteCity.dat.gz${SUFFIX}
+			if [ $? -ne 0 ]; then
+				_sf
+				wget -t5 -T10 -q -O GeoLiteCity.dat.gz https://${DOMAIN}/${SUBFOLDER}all-platform/GeoLiteCity.dat.gz${SUFFIX}
+			fi
+		fi
+		;;
+	*)
+		_github
+		echo "github" > /install/.cdn.lock
+		wget -t3 -T10 -q -O GeoLiteCity.dat.gz https://${DOMAIN}/${SUBFOLDER}all-platform/GeoLiteCity.dat.gz${SUFFIX}
+		if [ $? -ne 0 ]; then
+			_cf
+			wget -t5 -T20 -q -O GeoLiteCity.dat.gz https://${DOMAIN}/${SUBFOLDER}all-platform/GeoLiteCity.dat.gz${SUFFIX}
+			if [ $? -ne 0 ]; then
+				_sf
+				wget -t5 -T10 -q -O GeoLiteCity.dat.gz https://${DOMAIN}/${SUBFOLDER}all-platform/GeoLiteCity.dat.gz${SUFFIX}
+			fi
+		fi
+		;;
+	esac
 	gunzip GeoLiteCity.dat.gz >/dev/null 2>&1
 	mkdir -p /usr/share/GeoIP
 	rm -rf GeoLiteCity.dat.gz
@@ -381,37 +500,6 @@ EOF
 	chmod 755 /home/${username}
 }
 
-function _askmount() {
-	# get all disk mount
-	local LIST=()
-	local extralength=0
-	# create list for mountpoint (only for / and /home)
-	if [[ -n $(findmnt -n -o SOURCE /home) ]]; then
-		LIST+=("/home" "  $(findmnt -n -o SOURCE /home)    $(lsblk -l "$(findmnt -n -o SOURCE /home)" | grep -v 'SIZE' | tr -s ' ' | cut -d " " -f 4,4)" off)
-		if [ "$(echo -n "$(findmnt -n -o SOURCE /)" | wc -m)" -gt "10" ]; then extralength=1; fi
-	fi
-	LIST+=("/" "  $(findmnt -n -o SOURCE /)    $(lsblk -l "$(findmnt -n -o SOURCE /)" | grep -v 'SIZE' | tr -s ' ' | cut -d " " -f 4,4)" off)
-	if [ "$(echo -n "$(findmnt -n -o SOURCE /)" | wc -m)" -gt "10" ]; then extralength=1; fi
-	device=""
-	if [[ $extralength == 1 ]]; then
-		local width=56
-	else
-		local width=40
-	fi
-	while [[ $device == "" ]]; do
-		device=$(
-			whiptail --title "$INFO_TITLE_MOUNT" --radiolist \
-			"$(if [[ $extralength == 1 ]]; then echo "      "; fi)$INFO_TEXT_MOUNT" 12 ${width} 4 \
-			"${LIST[@]}" \
-			--ok-button "$BUTTON_OK" --cancel-button "$BUTTON_CANCLE" 3>&1 1>&2 2>&3
-		)
-		if [[ $device == "" ]]; then
-			whiptail --title "$ERROR_TITLE_MOUNT" --msgbox "$ERROR_TEXT_MOUNT" --ok-button "$BUTTON_OK" 8 72
-		fi
-	done
-	device=$(echo "$device" | tr -d "[:space:]")
-}
-
 function _askvsftpd() {
 	ip=$(ip addr show | grep 'inet ' | grep -v 127.0.0.1 | awk '{print $2}' | cut -d/ -f1 | head -n 1)
 	if (whiptail --title "$INFO_TITLE_FTP" --yesno "$INFO_TEXT_FTP" --yes-button "$BUTTON_YES" --no-button "$BUTTON_NO" 8 72); then
@@ -467,6 +555,55 @@ function _askchsource() {
 	fi
 }
 
+function _askcdn() {
+	if (whiptail --title "$INFO_TITLE_CDN" --yesno "$INFO_TEXT_CDN" --yes-button "$BUTTON_YES" --no-button "$BUTTON_NO" 8 72); then
+		cdn="--with-"
+		cdn+=$(
+			whiptail --title "$INFO_TITLE_CDN" --radiolist \
+				"$INFO_TEXT_CDN_EXTRA" 12 42 4 \
+				"cf" "$CHOICE_TEXT_CDN_EXTRA_CF" off \
+				"sf" "$CHOICE_TEXT_CDN_EXTRA_SF" off \
+				"osdn" "$CHOICE_TEXT_CDN_EXTRA_OSDN" off \
+				"github" "$CHOICE_TEXT_CDN_EXTRA_GITHUB" on \
+				3>&1 1>&2 2>&3
+		)
+	else
+		cdn="--with-github"
+	fi
+}
+
+function _askSwap() {
+	swap_path=$(whiptail --title "$INFO_TITLE_SWAP" --inputbox "${INFO_TEXT_SWAP_1} \n${INFO_TEXT_SWAP_2}" 10 72 --ok-button "$BUTTON_OK" --cancel-button "$BUTTON_CANCLE" 3>&1 1>&2 2>&3)
+	if [[ ${swap_path} == "" ]]; then
+		swap_path="/root/.swapfile"
+	elif [[ ! -d $(dirname ${swap_path}) ]]; then
+		swap_path="/root/.swapfile"
+	fi
+	{
+		if [[ ! -f ${swap_path} ]]; then
+			touch ${swap_path} || exit 1
+		fi
+		echo -e "XXX\n10\n$INFO_TEXT_SWAPON_0$INFO_TEXT_DONE\nXXX"
+		sleep 1
+		echo -e "XXX\n10\n$INFO_TEXT_SWAPON_1\nXXX"
+		dd if=/dev/zero of=${swap_path} bs=1M count=2048 >/dev/null 2>&1
+		echo -e "XXX\n50\n$INFO_TEXT_SWAPON_1$INFO_TEXT_DONE\nXXX"
+		sleep 1
+		echo -e "XXX\n50\n$INFO_TEXT_SWAPON_2\nXXX"
+		chmod 600 ${swap_path} >/dev/null 2>&1
+		mkswap ${swap_path} >/dev/null 2>&1
+		swapon ${swap_path} >/dev/null 2>&1
+		swapon -s >/dev/null 2>&1
+		echo -e "XXX\n75\n$INFO_TEXT_SWAPON_2$INFO_TEXT_DONE\nXXX"
+		sleep 1
+		echo -e "XXX\n75\n$INFO_TEXT_SWAPON_3\nXXX"
+		cat >> /etc/fstab <<EOF
+${swap_path} swap swap defaults 0 0
+EOF
+		echo -e "XXX\n100\n$INFO_TEXT_SWAPON_3$INFO_TEXT_DONE\nXXX"
+	} | whiptail --title "$INFO_TITLE_SWAPON" --gauge "$INFO_TEXT_SWAPON_0" 8 64 0
+}
+
 function _chsource() {
 	if [[ $mirror == "" ]]; then mirror="us"; fi
 	if [[ $DISTRO == Debian ]]; then
@@ -501,7 +638,7 @@ function _chsource() {
 
 function _addPHP() {
 	if [[ $DISTRO == "Ubuntu" ]]; then
-		# add php7.2
+		# add php7.4
 		apt-key adv --recv-keys --keyserver hkp://keyserver.ubuntu.com:80 0x5a16e7281be7a449 >/dev/null 2>&1
 		LC_ALL=en_US.UTF-8 add-apt-repository ppa:ondrej/php -y >/dev/null 2>&1
 	elif [[ "$DISTRO" =~ ("Debian"|"Raspbian") ]]; then
@@ -552,7 +689,7 @@ function _preinsngx() {
 function _dependency() {
 	_addPHP
 	_preinsngx
-	DEPLIST="sudo bc curl wget subversion ssl-cert php7.2-memcached memcached php7.2 php7.2-cli php7.2-curl php7.2-dev php7.2-fpm php7.2-gd php7.2-geoip php7.2-json php7.2-mbstring php7.2-opcache php7.2-xml php7.2-xmlrpc php7.2-zip libfcgi0ldbl mcrypt libmcrypt-dev nano python-dev unzip htop iotop vnstat vnstati automake make openssl net-tools debconf-utils ntp rsync"
+	DEPLIST="sudo bc build-essential curl wget subversion ssl-cert php7.4-cli php7.4-fpm php7.4 php7.4-dev php7.4-memcached memcached php7.4-curl php7.4-gd php7.4-json php7.4-mbstring php7.4-opcache php7.4-xml php7.4-xmlrpc php7.4-zip libfcgi0ldbl mcrypt libmcrypt-dev nano python-dev unzip htop iotop vnstat vnstati automake make openssl net-tools debconf-utils ntp rsync"
 	for depend in $DEPLIST; do
 		echo -e "XXX\n12\n$INFO_TEXT_PROGRESS_Extra_2${depend}\nXXX"
 		DEBIAN_FRONTEND=noninteractive apt-get -y --allow-unauthenticated -f install ${depend} >>${OUTTO} 2>&1 || { local dependError=1; }
@@ -565,7 +702,7 @@ function _dependency() {
 
 function _insngx() {
 	rm -rf /etc/nginx/nginx.conf
-	if [[ $CODENAME =~ ("bionic"|"stretch"|"buster") ]]; then
+	if [[ $CODENAME =~ ("bionic"|"stretch"|"buster"|"focal") ]]; then
 		cp ${local_setup_template}nginx/nginx.conf.new.template /etc/nginx/nginx.conf
 	else
 		cp ${local_setup_template}nginx/nginx.conf.old.template /etc/nginx/nginx.conf
@@ -579,7 +716,7 @@ function _insngx() {
 		sed -i 's/listen \[::\]:443 ssl http2 default_server;/#listen \[::\]:443 ssl http2 default_server;/g' /etc/nginx/sites-enabled/default
 	fi
 
-	ln -nsf /usr/bin/php7.2 /usr/bin/php
+	ln -nsf /usr/bin/php7.4 /usr/bin/php
 	sed -i.bak -e "s/post_max_size.*/post_max_size = 64M/" \
 	-e "s/upload_max_filesize.*/upload_max_filesize = 92M/" \
 	-e "s/expose_php.*/expose_php = Off/" \
@@ -588,13 +725,13 @@ function _insngx() {
 	-e "s/;opcache.enable.*/opcache.enable=1/" \
 	-e "s/;opcache.memory_consumption.*/opcache.memory_consumption=128/" \
 	-e "s/;opcache.max_accelerated_files.*/opcache.max_accelerated_files=4000/" \
-	-e "s/;opcache.revalidate_freq.*/opcache.revalidate_freq=240/" /etc/php/7.2/fpm/php.ini
+	-e "s/;opcache.revalidate_freq.*/opcache.revalidate_freq=240/" /etc/php/7.4/fpm/php.ini
 
-	phpenmod -v 7.2 opcache
-	phpenmod -v 7.2 xml
-	phpenmod -v 7.2 mbstring
-	phpenmod -v 7.2 msgpack
-	phpenmod -v 7.2 memcached
+	phpenmod -v 7.4 opcache
+	phpenmod -v 7.4 xml
+	phpenmod -v 7.4 mbstring
+	phpenmod -v 7.4 msgpack
+	phpenmod -v 7.4 memcached
 
 	mkdir -p /etc/nginx/ssl/
 	mkdir -p /etc/nginx/snippets/
@@ -623,7 +760,18 @@ function _insngx() {
 	mkdir -p /var/log/nginx/
 	chown -R www-data.www-data /var/log/nginx/
 	systemctl restart nginx
-	systemctl restart php7.2-fpm
+	systemctl restart php7.4-fpm
+}
+
+function _insnodejs() {
+	# install Nodejs for background service
+	cd /tmp || exit 1
+	curl -sL https://deb.nodesource.com/setup_12.x -o nodesource_setup.sh
+	sudo bash nodesource_setup.sh >>"${OUTTO}" 2>&1
+	apt-get install -y nodejs >>"${OUTTO}" 2>&1
+	if [[ -f /tmp/nodesource_setup.sh ]]; then
+		rm nodesource_setup.sh
+	fi
 }
 
 function _webconsole() {
@@ -671,7 +819,9 @@ WEBC
 function _insdashboard() {
 	echo -e "XXX\n27\n$INFO_TEXT_PROGRESS_7_1\nXXX"
 	_insngx
-	echo -e "XXX\n29\n$INFO_TEXT_PROGRESS_7_2\nXXX"
+	echo -e "XXX\n28\n$INFO_TEXT_PROGRESS_7_2\nXXX"
+	_insnodejs
+	echo -e "XXX\n29\n$INFO_TEXT_PROGRESS_7_3\nXXX"
 	_webconsole
 	cd && mkdir -p /srv/dashboard
 	\cp -fR ${local_setup_dashboard}. /srv/dashboard
@@ -684,30 +834,32 @@ function _insdashboard() {
 	sed -i "s/INETFACE/${IFACE}/g" /srv/dashboard/widgets/bw_tables.php
 	sed -i "s/INETFACE/${IFACE}/g" /srv/dashboard/inc/config.php
 	echo "${username}" >/srv/dashboard/db/master.txt
-	# fix Disk Widget
-	if [[ $device == "/home" ]]; then
-		rm -f /srv/dashboard/widgets/disk_data.php
-		cp ${local_setup_dashboard}widgets/disk_datah.php /srv/dashboard/widgets/disk_data.php
-	else
-		rm -f /srv/dashboard/widgets/disk_data.php
-		cp ${local_setup_dashboard}widgets/disk_data.php /srv/dashboard/widgets/disk_data.php
-	fi
 	chown -R www-data: /srv/dashboard
 	cp ${local_setup_template}nginx/dashboard.conf.template /etc/nginx/apps/dashboard.conf
 	sed -i "s/\/etc\/htpasswd/\/etc\/htpasswd.d\/htpasswd.${username}/g" /etc/nginx/apps/dashboard.conf
 	service nginx force-reload >/dev/null 2>&1
-	case $lang_ui in
+	case $uilang in
 	"en")
 		bash /usr/local/bin/quickbox/system/lang/langSelect-lang_en >/dev/null 2>&1
 		touch /install/.lang_en.lock
 		;;
-	"zh-cn")
+	"zh")
 		bash /usr/local/bin/quickbox/system/lang/langSelect-lang_zh-cn >/dev/null 2>&1
 		touch /install/.lang_zh.lock
 		;;
+	*)
+		bash /usr/local/bin/quickbox/system/lang/langSelect-lang_en >/dev/null 2>&1
+		touch /install/.lang_en.lock
+		;;
 	esac
-
 	touch /install/.dashboard.lock
+	cd /srv/dashboard/ws || exit 1
+	npm install --production >>"${OUTTO}" 2>&1
+	\cp -f ${local_setup_template}systemd/quickbox-ws.service.template /etc/systemd/system/quickbox-ws.service
+	systemctl daemon-reload >/dev/null 2>&1
+	systemctl enable quickbox-ws.service >/dev/null 2>&1
+	systemctl start quickbox-ws.service >/dev/null 2>&1
+	touch /install/.quickbox-ws.lock
 }
 
 function _askapps() {
@@ -747,7 +899,7 @@ function _askrtgui() {
 function _insapps() {
 	if [[ "$app_list" =~ "rtorrent" ]]; then
 		echo -e "XXX\n30\n$INFO_TEXT_INSTALLAPP_1\nXXX"
-		bash ${local_setup_script}rtorrent.sh "${OUTTO}" "${rtgui}" >/dev/null 2>&1
+		bash ${local_setup_script}rtorrent.sh "${OUTTO}" "${rtgui}" "$cdn" >/dev/null 2>&1
 		echo -e "XXX\n36\n$INFO_TEXT_INSTALLAPP_1$INFO_TEXT_DONE\nXXX"
 	else
 		echo -e "XXX\n36\n$INFO_TEXT_INSTALLAPP_1$INFO_TEXT_SKIP\nXXX"
@@ -755,7 +907,7 @@ function _insapps() {
 	sleep 1
 	if [[ "$app_list" =~ "transmission" ]]; then
 		echo -e "XXX\n36\n$INFO_TEXT_INSTALLAPP_2\nXXX"
-		bash ${local_setup_script}transmission.sh "${OUTTO}" >/dev/null 2>&1
+		bash ${local_setup_script}transmission.sh "${OUTTO}" "$cdn" >/dev/null 2>&1
 		echo -e "XXX\n43\n$INFO_TEXT_INSTALLAPP_2$INFO_TEXT_DONE\nXXX"
 	else
 		echo -e "XXX\n43\n$INFO_TEXT_INSTALLAPP_2$INFO_TEXT_SKIP\nXXX"
@@ -763,7 +915,7 @@ function _insapps() {
 	sleep 1
 	if [[ "$app_list" =~ "qbittorrent" ]]; then
 		echo -e "XXX\n43\n$INFO_TEXT_INSTALLAPP_3\nXXX"
-		bash ${local_setup_script}qbittorrent.sh "${OUTTO}" >/dev/null 2>&1
+		bash ${local_setup_script}qbittorrent.sh "${OUTTO}" "$cdn" >/dev/null 2>&1
 		echo -e "XXX\n49\n$INFO_TEXT_INSTALLAPP_3$INFO_TEXT_DONE\nXXX"
 	else
 		echo -e "XXX\n49\n$INFO_TEXT_INSTALLAPP_3$INFO_TEXT_SKIP\nXXX"
@@ -771,7 +923,7 @@ function _insapps() {
 	sleep 1
 	if [[ "$app_list" =~ "deluge" ]]; then
 		echo -e "XXX\n49\n$INFO_TEXT_INSTALLAPP_4\nXXX"
-		bash ${local_setup_script}deluge.sh "${OUTTO}" >/dev/null 2>&1
+		bash ${local_setup_script}deluge.sh "${OUTTO}" "$cdn" >/dev/null 2>&1
 		echo -e "XXX\n56\n$INFO_TEXT_INSTALLAPP_4$INFO_TEXT_DONE\nXXX"
 	else
 		echo -e "XXX\n56\n$INFO_TEXT_INSTALLAPP_4$INFO_TEXT_SKIP\nXXX"
@@ -859,11 +1011,11 @@ function _startinstall() {
 
 		# change ssh port
 		echo -e "XXX\n03\n$INFO_TEXT_PROGRESS_2\nXXX"
-		if [[ $chport == "4747" ]]; then
+		if [[ $chport == "default" ]]; then
+			echo -e "XXX\n06\n$INFO_TEXT_PROGRESS_2$INFO_TEXT_SKIP\nXXX"
+		else
 			_changeport
 			echo -e "XXX\n06\n$INFO_TEXT_PROGRESS_2$INFO_TEXT_DONE\nXXX"
-		else
-			echo -e "XXX\n06\n$INFO_TEXT_PROGRESS_2$INFO_TEXT_SKIP\nXXX"
 		fi
 		sleep 1
 
@@ -917,8 +1069,12 @@ function _startinstall() {
 
 		# setup vsftpd
 		echo -e "XXX\n85\n$INFO_TEXT_PROGRESS_10\nXXX"
-		_setvsftpd
-		echo -e "XXX\n90\n$INFO_TEXT_PROGRESS_10$INFO_TEXT_DONE\nXXX"
+		if [[ $ftp == 1 ]]; then
+			_setvsftpd
+			echo -e "XXX\n90\n$INFO_TEXT_PROGRESS_10$INFO_TEXT_DONE\nXXX"
+		else
+			echo -e "XXX\n90\n$INFO_TEXT_PROGRESS_10$INFO_TEXT_SKIP\nXXX"
+		fi
 		sleep 1
 
 		# Finish
@@ -952,16 +1108,23 @@ function _startinstall() {
 function _summary() {
 	# Summary list
 	ip=$(ip addr show | grep 'inet ' | grep -v 127.0.0.1 | awk '{print $2}' | cut -d/ -f1 | head -n 1)
+	sshport=$(grep -e '#*Port 22' < /etc/ssh/sshd_config | grep -Eo "[0-9]+" )
 	if (whiptail --title "$INFO_TITLE_SUMMARY" --yesno "${INFO_TEXT_SUMMARY_1}\n\n\
 ${INFO_TEXT_SUMMARY_2} $(echo "$OUTTO" | cut -d " " -f 1)\n\
 $(if [[ $hostname != "" ]]; then echo -e "${INFO_TEXT_SUMMARY_3}$hostname\n"; fi)\
-${INFO_TEXT_SUMMARY_4} $ip:$chport\n\
+${INFO_TEXT_SUMMARY_4} $ip:$sshport\n\
 ${INFO_TEXT_SUMMARY_5} $username\n\
 ${INFO_TEXT_SUMMARY_6} $password\n\
-\"$device\" ${INFO_TEXT_SUMMARY_7}\n\
 $(if [[ $ftp == 1 ]]; then echo -e "${INFO_TEXT_SUMMARY_11} $ftp_ip:5757\n"; fi)\
-\n${INFO_TEXT_SUMMARY_12} $dash_theme ${INFO_TEXT_SUMMARY_13}\n\
-$(if [[ $chsource == 1 ]]; then echo -e "\n${INFO_TEXT_SUMMARY_14}\n"; fi)\
+\n${INFO_TEXT_SUMMARY_12} $dash_theme ${INFO_TEXT_SUMMARY_13}\
+$(if [[ $chsource == 1 ]]; then echo -e "\n${INFO_TEXT_SUMMARY_14}"; fi)\
+$(case "$cdn" in
+	"--with-cf") echo -e "\nCloudflare ${INFO_TEXT_SUMMARY_19}";;
+	"--with-sf") echo -e "\nSourceforge ${INFO_TEXT_SUMMARY_19}";;
+	"--with-osdn") echo -e "\nOSDN ${INFO_TEXT_SUMMARY_19}";;
+	"--with-github") echo -e "\nGitHub ${INFO_TEXT_SUMMARY_19}";;
+	*) echo -e "\nGitHub ${INFO_TEXT_SUMMARY_19}";;
+esac)\
 $(if [[ $app_list != "" ]]; then
 		echo -e "\n${INFO_TEXT_SUMMARY_15}"
 		for i in "${app_list[@]}"; do
@@ -983,10 +1146,10 @@ $(if [[ $autoreboot == 1 ]]; then echo -e "\n${INFO_TEXT_SUMMARY_17}\n"; fi)\
 			"ssh port" "$CHOICE_TEXT_EDIT_2" \
 			"user name" "$CHOICE_TEXT_EDIT_3" \
 			"password" "$CHOICE_TEXT_EDIT_4" \
-			"primary root" "$CHOICE_TEXT_EDIT_5" \
 			"ftp" "$CHOICE_TEXT_EDIT_7" \
 			"dashboard theme" "$CHOICE_TEXT_EDIT_8" \
 			"source.list" "$CHOICE_TEXT_EDIT_9" \
+				"cdn" "$CHOICE_TEXT_EDIT_13" \
 			"softwares" "$CHOICE_TEXT_EDIT_10" \
 			"autoreboot" "$CHOICE_TEXT_EDIT_11" 3>&1 1>&2 2>&3
 		)
@@ -995,10 +1158,10 @@ $(if [[ $autoreboot == 1 ]]; then echo -e "\n${INFO_TEXT_SUMMARY_17}\n"; fi)\
 		"ssh port") _askchport ;;
 		"user name") _askusrname ;;
 		"password") _askpasswd ;;
-		"primary root") _askmount ;;
 		"ftp") _askvsftpd ;;
 		"dashboard theme") _askdashtheme ;;
 		"source.list") _askchsource ;;
+		"cdn") _askcdn ;;
 		"softwares") _askapps ;;
 		"autoreboot") _askautoreboot ;;
 		esac
@@ -1009,27 +1172,251 @@ $(if [[ $autoreboot == 1 ]]; then echo -e "\n${INFO_TEXT_SUMMARY_17}\n"; fi)\
 	fi
 }
 
+#################################################################################
+# USAGE
+#################################################################################
+function _usage() {
+	echo -e "\nQuickBox ARM Setup Script
+\nUsage: bash $(basename "$0") -u username -p password [OPTS]
+\nOptions:
+  NOTE: * is required anyway
+
+  -H, --hostname <hostname>        setup hostname, make no change by default
+  -P, --port <1-65535>             setup ssh service port, use 4747 by default
+  -u, --username <username*>       username is required here
+  -p, --password <password*>       your password is required here
+  -r, --reboot                     reboot after installation finished (default no)
+  -s, --source <tuna|ustc>         choose apt source (default unchange)
+  -t, --theme <defaulted|smoked>   choose a theme for your dashboard (default smoked)
+  --lang <en|zh>                   choose a TUI language (default english)
+  --with-log,no-log                install with log to file or not (default yes)
+  --with-ftp,--no-ftp              install ftp or not (default yes)
+  --ftp-ip <ip address>            manually setup ftp ip
+  --with-cf                        use cloudflare instead of sourceforge
+  --with-sf                        use sourceforge
+  --with-osdn                      use osdn(jp) instead of sourceforge
+  --with-github                    use github
+  --with-APPNAME                   install an application
+
+    Available applications:
+    rtorrent,rutorrent,flood,transmission,qbittorrent,
+    deluge,mktorrent,ffmpeg,filebrowser,linuxrar
+
+  -h, --help                       display this help and exit"
+}
+
+#################################################################################
+# FLAGS INIT
+#################################################################################
+uilang="en"
+OUTTO="/root/quickbox.$PPID.log"
+ftp=1
+ftp_ip=$(ip addr show | grep 'inet ' | grep -v 127.0.0.1 | awk '{print $2}' | cut -d/ -f1 | head -n 1)
+onekey=0
+chport=4747
+chsource=0
+autoreboot=0
+dash_theme="smoked"
+app_list=""
+rtgui="rutorrent"
+
+#################################################################################
+# OPT GENERATOR
+#################################################################################
+if ! ARGS=$(getopt -a -o hrH:p:P:s:t:u: -l help,ftp-ip:,lang:,reboot,with-log,no-log,with-ftp,no-ftp,with-cf,with-sf,with-osdn,with-github,with-rtorrent,with-rutorrent,with-flood,with-transmission,with-qbittorrent,with-deluge,with-mktorrent,with-ffmpeg,with-filebrowser,with-linuxrar,hostname:,port:,username:,password:,source:,theme: -- "$@")
+then
+	_usage
+    exit 1
+fi
+eval set -- "${ARGS}"
+while true; do
+	case "$1" in
+	-H | --hostname)
+		onekey=1
+		hostname="$2"
+		shift
+		;;
+	-h | --help)
+		_usage
+		exit 1
+		;;
+	-P | --port)
+		onekey=1
+		chport=$(echo "$2" | grep -P '^()([1-9]|[1-5]?[0-9]{2,4}|6[1-4][0-9]{3}|65[1-4][0-9]{2}|655[1-2][0-9]|6553[1-5])$')
+		if [[ -z $chport ]]; then
+			_usage
+			exit 1
+		fi
+		shift
+		;;
+	-u | --user)
+		onekey=1
+		username="$2"
+		count=0
+		reserved_names=('adm' 'admin' 'audio' 'backup' 'bin' 'cdrom' 'crontab' 'daemon' 'dialout' 'dip' 'disk' 'fax' 'floppy' 'fuse' 'games' 'gnats' 'irc' 'kmem' 'landscape' 'libuuid' 'list' 'lp' 'mail' 'man' 'messagebus' 'mlocate' 'netdev' 'news' 'nobody' 'nogroup' 'operator' 'plugdev' 'proxy' 'root' 'sasl' 'shadow' 'src' 'ssh' 'sshd' 'staff' 'sudo' 'sync' 'sys' 'syslog' 'tape' 'tty' 'users' 'utmp' 'uucp' 'video' 'voice' 'whoopsie' 'www-data')
+		count=$(echo -n "$username" | wc -c)
+		if $(echo "${reserved_names[@]}" | grep -wq "$username"); then
+			_error "Do not use reversed user name !"
+			exit 1
+		elif [[ $count -lt 3 || $count -gt 32 ]]; then
+			_error "User name cannot less than 3 or more than 32 characters !"
+			exit 1
+		elif ! [[ "$username" =~ ^[a-z][-a-z0-9_]*$ ]]; then
+			_error "Your username must start from a lower case letter and the username"
+			_error "must contain only lowercase letters, numbers, hyphens, and underscores."
+			exit 1
+		fi
+		shift
+		;;
+	-p | --password)
+		onekey=1
+		password="$2"
+		count=$(echo -n "$password" | wc -c)
+		strength=$(echo "$password" | grep -P '(?=^.{8,32}$)(?=^[^\s]*$)(?=.*\d)(?=.*[A-Z])(?=.*[a-z])')
+		if [[ $count -lt 8 ]]; then
+			_error "Your password cannot less than 8 characters !"
+			exit 1
+		else
+			if [[ $strength == "" ]]; then
+				_error "Your password must consist:"
+				_error "1.digital numbers"
+				_error "2.at least one lower case letter"
+				_error "3.one upper case letter"
+				exit 1
+			fi
+		fi
+		shift
+		;;
+	--lang) 
+		if [[ $2 =~ "en"|"zh" ]]; then
+			uilang=$2
+		else
+			uilang="en"
+		fi
+		;;
+	--with-log) OUTTO="/root/quickbox.$PPID.log" ;;
+	--no-log) OUTTO="/dev/null 2>&1" ;;
+	--with-ftp) ftp=1 ;;
+	--no-ftp) ftp=0 ;;
+	--ftp-ip)
+		ftp_ip="$2"
+		if [[ $ftp_ip == "" ]]; then ftp_ip=$(ip addr show | grep 'inet ' | grep -v 127.0.0.1 | awk '{print $2}' | cut -d/ -f1 | head -n 1); fi
+		shift
+		;;
+	-r | --reboot) autoreboot=1 ;;
+	-t | --theme)
+		if [[ "$2" =~ "defaulted"|"smoked" ]]; then
+			dash_theme="$2"
+		else
+			_error "$2 theme not available"
+			exit 1
+		fi
+		shift
+		;;	
+	-s | --source)
+		if [[ "$2" =~ "tuna"|"ustc" ]]; then
+			chsource=1
+			mirror="$2"
+		else
+			_error "$2 source not available"
+			exit 1
+		fi
+		shift
+		;;
+	--with-cf) cdn="--with-cf" ;;
+	--with-sf) cdn="--with-sf" ;;
+	--with-osdn) cdn="--with-osdn" ;;
+	--with-github) cdn="--with-github" ;;
+	--with-rtorrent) app_list+=" rtorrent" ;;
+	--with-rutorrent) rtgui="rutorrent" ;;
+	--with-flood) rtgui="flood" ;;
+	--with-transmission) app_list+=" transmission" ;;
+	--with-qbittorrent) app_list+=" qbittorrent" ;;
+	--with-deluge) app_list+=" deluge" ;;
+	--with-mktorrent) app_list+=" mktorrent" ;;
+	--with-ffmpeg) app_list+=" ffmpeg" ;;
+	--with-filebrowser) app_list+=" filebrowser" ;;
+	--with-linuxrar) app_list+=" linuxrar" ;;
+	--)
+		shift
+		break
+		;;
+	esac
+	shift
+done
+
+#################################################################################
+# MAIN PROCESS
+#################################################################################
 # Init
 _init
-_selectlang
-_checkroot
-_checkdistro
-_welcome
+if [[ $onekey == 1 ]]; then
+	if [[ -n $username && -n $password ]]; then
+		_checkroot
+		_checkdistro
+		if [[ $uilang == "zh" ]]; then
+			source ${local_lang}zh-cn.lang
+			echo 'LANGUAGE="zh_CN.UTF-8"' >>/etc/default/locale
+			echo 'LC_ALL="zh_CN.UTF-8"' >>/etc/default/locale
+		else
+			source ${local_lang}en.lang
+		fi
+		DEBIAN_FRONTEND=noninteractive dpkg-reconfigure locales >/dev/null 2>&1
+		if [ $(free -m | grep Mem | awk '{print  $2}') -le 2048 ]; then
+			swap_path=/root/.swapfile
+			{
+				if [[ ! -f ${swap_path} ]]; then
+					touch ${swap_path} || exit 1
+				fi
+				echo -e "XXX\n10\n$INFO_TEXT_SWAPON_0$INFO_TEXT_DONE\nXXX"
+				sleep 1
+				echo -e "XXX\n10\n$INFO_TEXT_SWAPON_1\nXXX"
+				dd if=/dev/zero of=${swap_path} bs=1M count=2048 >/dev/null 2>&1
+				echo -e "XXX\n50\n$INFO_TEXT_SWAPON_1$INFO_TEXT_DONE\nXXX"
+				sleep 1
+				echo -e "XXX\n50\n$INFO_TEXT_SWAPON_2\nXXX"
+				chmod 600 ${swap_path} >/dev/null 2>&1
+				mkswap ${swap_path} >/dev/null 2>&1
+				swapon ${swap_path} >/dev/null 2>&1
+				swapon -s >/dev/null 2>&1
+				echo -e "XXX\n75\n$INFO_TEXT_SWAPON_2$INFO_TEXT_DONE\nXXX"
+				sleep 1
+				echo -e "XXX\n75\n$INFO_TEXT_SWAPON_3\nXXX"
+				cat >> /etc/fstab <<EOF
+${swap_path} swap swap defaults 0 0
+EOF
+				echo -e "XXX\n100\n$INFO_TEXT_SWAPON_3$INFO_TEXT_DONE\nXXX"
+			} | whiptail --title "$INFO_TITLE_SWAPON" --gauge "$INFO_TEXT_SWAPON_0" 8 64 0
+    	fi
+		_startinstall
+	else
+		_error "Onekey install need Username and Password!"
+		exit 1
+	fi
+elif [[ $onekey == 0 ]]; then
+	_selectlang
+	_checkroot
+	_checkdistro
+	_welcome
 
-# Install guide
-_logcheck
-_askhostname
-_askchport
-_askusrname
-_askpasswd
-_askmount
-_askvsftpd
-_askdashtheme
-_askchsource
-_askapps
-_askautoreboot
+	# Install guide
+	_logcheck
+	_askhostname
+	_askchport
+	_askusrname
+	_askpasswd
+	_askvsftpd
+	_askdashtheme
+	_askchsource
+	_askcdn
+	_askapps
+	if [ $(free -m | grep Mem | awk '{print  $2}') -le 2048 ]; then
+		_askSwap
+	fi
+	_askautoreboot
 
-# Conclusion
-_summary
+	# Conclusion
+	_summary
 
-# Excute installation
+	# Excute installation
+fi

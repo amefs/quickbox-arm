@@ -60,28 +60,32 @@
                           <div class="row">
                             <div class="col-xs-12">
                               <div class="col-xs-12 col-md-6" style="padding: 0">
-                                <?php $language = array();
-                                $language[] = array('file' => 'lang_zh', 'title' =>'Chinese');             
-                                $language[] = array('file' => 'lang_dk', 'title' =>'Danish');
-                                $language[] = array('file' => 'lang_en', 'title' =>'English');
-                                $language[] = array('file' => 'lang_fr', 'title' =>'French');
-                                $language[] = array('file' => 'lang_de', 'title' =>'German');
-                                $language[] = array('file' => 'lang_es', 'title' =>'Spanish'); { ?>
+                                <?php
+                                $languages = array(
+                                  [ 'file' => 'lang_zh', 'title' => 'Chinese' ],
+                                  [ 'file' => 'lang_dk', 'title' => 'Danish'  ],
+                                  [ 'file' => 'lang_en', 'title' => 'English' ],
+                                  [ 'file' => 'lang_fr', 'title' => 'French'  ],
+                                  [ 'file' => 'lang_de', 'title' => 'German'  ],
+                                  [ 'file' => 'lang_es', 'title' => 'Spanish' ]
+                                );
+                                ?>
                                 <h5><?php echo T('LANG_SELECT'); ?></h5>
-                                <?php foreach($language as $lang) { ?>
-                                  <small><a href='?langSelect-<?php echo $lang['file'] ?>=true'><img class='lang-flag' src='lang/flag_<?php echo $lang['file'] ?>.png' /><?php echo $lang['title'] ?></a></small>
-                                <?php } ?>
+                                <?php foreach($languages as $lang) { ?>
+                                  <small><div onclick="boxHandler(event)" data-package="<?php echo $lang['file'] ?>" data-operation="lang" style="cursor: pointer;"><img class="lang-flag lazyload" data-src="lang/flag_<?php echo $lang['file'] ?>.png" /><?php echo $lang['title'] ?></div></small>
                                 <?php } ?>
                               </div>
                               <div class="col-xs-12 col-md-6" style="padding: 0">
-                              <?php $option = array();
-                              $option[] = array('file' => 'defaulted', 'title' =>'Defaulted');
-                              $option[] = array('file' => 'smoked', 'title' =>'Smoked'); { ?>
+                              <?php
+                              $themes = array(
+                                [ 'file' => 'defaulted', 'title' => 'Defaulted' ],
+                                [ 'file' => 'smoked'   , 'title' => 'Smoked'    ]
+                              );
+                              ?>
                                 <h5><?php echo T('THEME_SELECT'); ?></h5>
-                                <?php foreach($option as $theme) { ?>
-                                  <small><a href="javascript:void()" data-toggle="modal" data-target="#themeSelect<?php echo $theme['file'] ?>Confirm"><img class='lang-flag' src='img/themes/opt_<?php echo $theme['file'] ?>.png' /><?php echo $theme['title'] ?></a></small>
+                                <?php foreach($themes as $theme) { ?>
+                                  <small><div data-toggle="modal" data-target="#themeSelect<?php echo $theme['file'] ?>Confirm" style="cursor: pointer;"><img class="lang-flag lazyload" data-src="img/themes/opt_<?php echo $theme['file'] ?>.png" /><?php echo $theme['title'] ?></div></small>
                                 <?php } ?>
-                              <?php } ?>
                               </div>
                             </div>
                           </div>
@@ -127,51 +131,51 @@
             <!--li class="active"><a href="index.php"><i class="fa fa-home"></i> <span>Dashboard</span></a></li-->
             <!-- // RUTORRENT // -->
             <?php if (processExists("rtorrent",$username) && file_exists('/install/.rutorrent.lock')) { ?>
-              <li><a class="grayscale" href="<?php echo "$rutorrentURL"; ?>" target="_blank"><img src="img/brands/rtorrent.png" class="brand-ico"> <span>ruTorrent</span></a></li>
+              <li><a class="grayscale" href="<?php echo "$rutorrentURL"; ?>" target="_blank"><img data-src="img/brands/rtorrent.png" class="brand-ico lazyload"> <span>ruTorrent</span></a></li>
             <?php } ?>
             <!-- // FLOOD // -->
-            <?php if (processExists("rtorrent",$username) && file_exists('/install/.flood.lock')) { ?>
-              <li><a class="grayscale" href="<?php echo "$floodURL"; ?>" target="_blank"><img src="img/brands/flood.png" class="brand-ico"> <span>Flood</span></a></li>
+            <?php if (processExists("flood",$username) && file_exists('/install/.flood.lock')) { ?>
+              <li><a class="grayscale" href="<?php echo "$floodURL"; ?>" target="_blank"><img data-src="img/brands/flood.png" class="brand-ico lazyload"> <span>Flood</span></a></li>
             <?php } ?>
             <!-- // DELUGE-WEB // -->
             <?php if (processExists("deluge-web",$username) && file_exists('/install/.deluge.lock')) { ?>
-              <li><a class="grayscale" href="<?php echo "$dwURL"; ?>" target="_blank"><img src="img/brands/deluge.png" class="brand-ico"> <span>Deluge Web</span></a></li>
+              <li><a class="grayscale" href="<?php echo "$dwURL"; ?>" target="_blank"><img data-src="img/brands/deluge.png" class="brand-ico lazyload"> <span>Deluge Web</span></a></li>
             <?php } ?>
             <!-- // TRANSMISSION // -->
             <?php if (processExists("transmission-daemon",$username) && file_exists('/install/.transmission.lock')) { ?>
-              <li><a href="<?php echo "$transmissionURL"; ?>" class="grayscale" target="_blank"><img src="img/brands/transmission.png" class="brand-ico"> <span>Transmission Web Control</span></a></li>
+              <li><a href="<?php echo "$transmissionURL"; ?>" class="grayscale" target="_blank"><img data-src="img/brands/transmission.png" class="brand-ico lazyload"> <span>Transmission Web Control</span></a></li>
             <?php } ?>
 			      <!-- // QBITTORRENT // -->
             <?php if (processExists("qbittorrent-nox",$username) && file_exists('/install/.qbittorrent.lock')) { ?>
-              <li><a href="<?php echo "$qbittorrentURL"; ?>" class="grayscale" target="_blank"><img src="img/brands/qbittorrent.png" class="brand-ico"> <span>qBittorrent</span></a></li>
+              <li><a href="<?php echo "$qbittorrentURL"; ?>" class="grayscale" target="_blank"><img data-src="img/brands/qbittorrent.png" class="brand-ico lazyload"> <span>qBittorrent</span></a></li>
             <?php } ?>
             <?php if ($username == "$master") { ?>
-              <?php if (processExists("resilio-sync",rslsync) && file_exists('/install/.btsync.lock')) { ?>
-                <li><a class="grayscale" href="<?php echo "$btsyncURL"; ?>" target="_blank"><img src="img/brands/btsync.png" class="brand-ico"> <span>BTSync</span></a></li>
+              <?php if (processExists("rslsync",$username) && file_exists('/install/.btsync.lock')) { ?>
+                <li><a class="grayscale" href="<?php echo "$btsyncURL"; ?>" target="_blank"><img data-src="img/brands/btsync.png" class="brand-ico lazyload"> <span>BTSync</span></a></li>
               <?php } ?>
               <?php if (processExists("filebrowser",$username) && file_exists('/install/.filebrowser.lock')) { ?>
-                <li><a href="<?php echo "$filebrowserURL"; ?>" class="grayscale" target="_blank"><img src="img/brands/filebrowser.png" class="brand-ico"> <span>File Browser</span></a></li>
+                <li><a href="<?php echo "$filebrowserURL"; ?>" class="grayscale" target="_blank"><img data-src="img/brands/filebrowser.png" class="brand-ico lazyload"> <span>File Browser</span></a></li>
               <?php } ?>
               <?php if (processExists("flexget",$username) && file_exists("/install/.$username.flexget.lock")) { ?>
-                <li><a href="<?php echo "$flexgetURL"; ?>" class="grayscale" target="_blank"><img src="img/brands/flexget.png" class="brand-ico"> <span>FlexGet</span></a></li>
+                <li><a href="<?php echo "$flexgetURL"; ?>" class="grayscale" target="_blank"><img data-src="img/brands/flexget.png" class="brand-ico lazyload"> <span>FlexGet</span></a></li>
               <?php } ?>
               <?php if (processExists("netdata",netdata) && file_exists("/install/.netdata.lock")) { ?>
-                <li><a href="<?php echo "$netdataURL"; ?>" class="grayscale" target="_blank"><img src="img/brands/netdata.png" class="brand-ico"> <span>NetData</span></a></li>
+                <li><a href="<?php echo "$netdataURL"; ?>" class="grayscale" target="_blank"><img data-src="img/brands/netdata.png" class="brand-ico lazyload"> <span>NetData</span></a></li>
               <?php } ?>
               <?php if (processExists("Xtightvnc", $username) && file_exists("/install/.novnc.lock")) { ?>
-                <li><a href="<?php echo "$novncURL"; ?>" class="grayscale" target="_blank"><img src="img/brands/novnc.png" class="brand-ico"> <span>noVNC</span></a></li>
+                <li><a href="<?php echo "$novncURL"; ?>" class="grayscale" target="_blank"><img data-src="img/brands/novnc.png" class="brand-ico lazyload"> <span>noVNC</span></a></li>
               <?php } ?>
               <?php if (file_exists('/install/.plex.lock')) { ?>
-                <li><a class="grayscale" href="<?php echo "$plexURL"; ?>" target="_blank"><img src="img/brands/plex.png" class="brand-ico"> <span>Plex</span></a></li>
+                <li><a class="grayscale" href="<?php echo "$plexURL"; ?>" target="_blank"><img data-src="img/brands/plex.png" class="brand-ico lazyload"> <span>Plex</span></a></li>
               <?php } ?>
               <?php if (file_exists('/install/.syncthing.lock')) { ?>
-                <li><a class="grayscale" href="<?php echo "$syncthingURL"; ?>" target="_blank"><img src="img/brands/syncthing.png" class="brand-ico"> <span>Syncthing</span></a></li>
+                <li><a class="grayscale" href="<?php echo "$syncthingURL"; ?>" target="_blank"><img data-src="img/brands/syncthing.png" class="brand-ico lazyload"> <span>Syncthing</span></a></li>
               <?php } ?>
               <?php if (file_exists('/install/.znc.lock')) { ?>
-                <li><a class="grayscale" href="<?php echo "$zncURL"; ?>" target="_blank"><img src="img/brands/znc.png" class="brand-ico"> <span>ZNC</span></a></li>
+                <li><a class="grayscale" href="<?php echo "$zncURL"; ?>" target="_blank"><img data-src="img/brands/znc.png" class="brand-ico lazyload"> <span>ZNC</span></a></li>
               <?php } ?>
             <?php } ?>
-            <?php if (file_exists('/install/.rtorrent.lock') || file_exists('/install/.deluge.lock') || file_exists('/install/.transmission.lock') || file_exists('/install/.qbittorrent.lock')) { ?>
+            <?php if (file_exists('/install/.rtorrent.lock') || file_exists('/install/.deluge.lock') || file_exists('/install/.transmission.lock') || file_exists('/install/.qbittorrent.lock') || file_exists('/home/'. $username .'/openvpn/'. $username .'.zip')) { ?>
               <li class="nav-parent">
                 <a href=""><i class="fa fa-download"></i> <span><?php echo T('DOWNLOADS'); ?></span></a>
                 <ul class="children">
@@ -187,8 +191,8 @@
                   <?php if (file_exists('/install/.qbittorrent.lock')) { ?>
                     <li><a href="<?php echo "$qbittorrentdlURL"; ?>" target="_blank">qBittorrent</a></li>
                   <?php } ?>
-                  <?php if (file_exists('/home/'. $username .'/public_html/'. $username .'.zip')) { ?>
-                    <li><a href="/~<?php echo "$username"; ?>/<?php echo "$username"; ?>.zip" target="_blank"> <span>OpenVPN Config</span></a></li>
+                  <?php if (file_exists('/home/'. $username .'/openvpn/'. $username .'.zip')) { ?>
+                    <li><a href="<?php echo "$openvpndlURL"; ?>" target="_blank">OpenVPN Config</a></li>
                   <?php } ?>
                 </ul>
               </li>

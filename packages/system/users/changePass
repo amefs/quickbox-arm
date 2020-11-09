@@ -52,7 +52,7 @@ _green=$(tput setaf 2)
 _tan=$(tput setaf 3)
 _cyan=$(tput setaf 6)
 
-function _excute() {
+function _execute() {
 	($1 >>"${OUTTO}" 2>&1)
 }
 function _print() {
@@ -71,6 +71,7 @@ function _error() {
 	printf "${_red}✗ %s${_norm}\n" "$@"
 }
 
+function _version_gt() { test "$(printf '%s\n' "$@" | sort -V | head -n 1)" != "$1"; }
 #################################################################################
 # CORE VARIABLE
 #################################################################################
@@ -150,36 +151,36 @@ function _chPasswd() {
 
 	# Update application password
 	if [[ -f /install/.deluge.lock ]]; then
-		_excute "systemctl stop deluged@${username}"
-		_excute "systemctl stop deluge-web@${username}"
+		_execute "systemctl stop deluged@${username}"
+		_execute "systemctl stop deluge-web@${username}"
 		DWSALT=$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 32)
 		DWP=$(python2 /usr/local/bin/quickbox/system/auxiliary/deluge.Userpass.py ${password} ${DWSALT})
 		sed -i "s/.*$username.*/${username}:${password}:10/" /home/$username/.config/deluge/auth
 		sed -i "s/.*pwd_salt.*/  \"pwd_salt\": \"${DWSALT}\",/" /home/$username/.config/deluge/web.conf
 		sed -i "s/.*pwd_sha1.*/  \"pwd_sha1\": \"${DWP}\",/" /home/$username/.config/deluge/web.conf
 		sed -i "/$username/{n;s/.*/      \"${password}\"/}" /home/${username}/.config/deluge/hostlist.conf.1.2
-		_excute "systemctl start deluged@${username}"
-		_excute "systemctl start deluge-web@${username}"
+		_execute "systemctl start deluged@${username}"
+		_execute "systemctl start deluge-web@${username}"
 		_success "Deluge password updated"
 	fi
 	if [[ -f /install/.filebrowser.lock ]]; then
-		_excute "systemctl stop filebrowser@${username}"
+		_execute "systemctl stop filebrowser@${username}"
 		filebrowser -d /home/${username}/.config/filebrowser/filebrowser.db users update ${username} --password="${password}" >/dev/null 2>&1
-		_excute "systemctl start filebrowser@${username}"
+		_execute "systemctl start filebrowser@${username}"
 		_success "File Browser password updated"
 	fi
 	if [[ -f /install/.${username}.flexget.lock ]]; then
-		_excute "systemctl stop flexget@${username}"
+		_execute "systemctl stop flexget@${username}"
 		pypath=$(su ${username} -c 'python2 -m site --user-site')
 		binpath=/home/${username}/.local/bin
 		su ${username} -c "${binpath}/flexget -c /home/${username}/.config/flexget/config.yml web passwd ${password} >/dev/null 2>&1"
 		chown ${username}.${username} -R /home/${username}/.config/flexget/
-		_excute "systemctl start flexget@${username}"
+		_execute "systemctl start flexget@${username}"
 		_success "FlexGet password updated"
 	fi
 	if [[ -f /install/.novnc.lock ]]; then
 		prog=/usr/bin/vncpasswd
-		_excute "runuser -l $username -c /usr/bin/expect" <<EOF
+		_execute "runuser -l $username -c /usr/bin/expect" <<EOF
 spawn "$prog"
 expect "Password:"
 send "$password\r"
@@ -195,8 +196,17 @@ EOF
 	if [[ -f /install/.qbittorrent.lock ]]; then
 		_excute "systemctl stop qbittorrent@${username}"
 		sleep 3
-		ha1pass=$(echo -n "${password}" | md5sum | cut -f1 -d' ')
-		sed -i "s/.*Password_ha1.*/WebUI\\\Password_ha1=@ByteArray(${ha1pass})/" /home/${username}/.config/qBittorrent/qBittorrent.conf
+		qbit_version=0
+		if (dpkg-query -W -f='${Status}' qbittorrent-nox 2>/dev/null | grep -c "ok installed" >/dev/null); then
+			qbit_version=$(dpkg -s qbittorrent-nox | grep '^Version:' | grep -Eo "[0-9.]+" | head -n1)
+		fi
+		if (_version_gt ${qbit_version} 4.1.9.1); then
+			pbkdf2pass=$(/usr/local/bin/quickbox/system/auxiliary/qb_password_gen ${password})
+			sed -i "s|Password_ha1.*|Password_PBKDF2=\"@ByteArray(${pbkdf2pass})\"|g" /home/${username}/.config/qBittorrent/qBittorrent.conf
+		else
+			ha1pass=$(echo -n "${password}" | md5sum | cut -f1 -d' ')
+			sed -i "s/.*Password_ha1.*/WebUI\\\Password_ha1=@ByteArray(${ha1pass})/" /home/${username}/.config/qBittorrent/qBittorrent.conf
+		fi
 		_excute "systemctl start qbittorrent@${username}"
 		_success "qBittorrent password updated"
 	fi
@@ -212,7 +222,11 @@ EOF
 #################################################################################
 # OPT GENERATOR
 #################################################################################
-ARGS=$(getopt -a -o hl:u:p: -l help,log:,user:,password: -- "$@")
+if ! ARGS=$(getopt -a -o hl:u:p: -l help,log:,user:,password: -- "$@")
+then
+    _usage
+    exit 1
+fi
 eval set -- "${ARGS}"
 while true; do
 	case "$1" in

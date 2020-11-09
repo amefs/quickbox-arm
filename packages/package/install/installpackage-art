@@ -1,0 +1,406 @@
+#!/bin/bash
+#
+# [QuickBox ARM autoremove-torrents Installer]
+#
+# GitHub:   https://github.com/amefs/quickbox-arm
+# Author:   Amefs
+# Current version:  v1.0.0
+# URL:
+# Original Repo:    https://github.com/QuickBox/QB
+# Credits to:       QuickBox.io
+#
+#   Licensed under GNU General Public License v3.0 GPL-3 (in short)
+#
+#   You may copy, distribute and modify the software as long as you track
+#   changes/dates in source files. Any modifications to our software
+#   including (via compiler) GPL-licensed code must also be made available
+#   under the GPL along with build & install instructions.
+#
+#################################################################################
+#################################################################################
+# CORE VARIABLE
+#################################################################################
+CODENAME=$(lsb_release -cs)
+
+################################################################################
+# HELP FUNCTIONS
+################################################################################
+export NEWT_COLORS='
+root=,black
+window=,lightgray
+shadow=,color8
+title=color8,
+checkbox=,magenta
+entry=,color8
+label=blue,
+actlistbox=,magenta
+actsellistbox=,magenta
+helpline=,magenta
+roottext=,magenta
+emptyscale=magenta
+disabledentry=magenta,
+'
+
+_norm=$(tput sgr0)
+_red=$(tput setaf 1)
+_green=$(tput setaf 2)
+_tan=$(tput setaf 3)
+_cyan=$(tput setaf 6)
+
+function _execute() {
+	($1 >>"${OUTTO}" 2>&1)
+}
+function _print() {
+	printf "${_norm}%s${_norm}\n" "$@"
+	printf "%s\n" "$@" >>"${OUTTO}"
+}
+function _info() {
+	printf "${_cyan}➜ %s${_norm}\n" "$@"
+	printf ">> Info: %s\n" "$@" >>"${OUTTO}"
+}
+function _success() {
+	printf "${_green}✓ %s${_norm}\n" "$@"
+	printf ">> Success: %s\n" "$@" >>"${OUTTO}"
+}
+function _warning() {
+	printf "${_tan}⚠ %s${_norm}\n" "$@"
+	printf ">> Warning: %s\n" "$@" >>"${OUTTO}"
+}
+function _error() {
+	printf "${_red}✗ %s${_norm}\n" "$@"
+	printf ">> Error: %s\n" "$@" >>"${OUTTO}"
+}
+
+function _version_gt() { test "$(printf '%s\n' "$@" | sort -V | head -n 1)" != "$1"; }
+#################################################################################
+# APP VARIABLE
+#################################################################################
+APP_TITLE="autoremove-torrents"
+APP_NAME="autoremovetorrents"
+APP_HOST="127.0.0.1"
+
+OUTTO=/srv/dashboard/db/output.log
+username=$(cat /root/.admin.info | cut -d: -f1)
+
+################################################################################
+# SCRIPT FUNCTIONS
+################################################################################
+function _usage() {
+	echo -e "\nQuickBox ARM $APP_TITLE Installer"
+	echo -e "\nUsage: \n$(basename "$0") [-h] [-l logfile] [-u username]"
+	echo -e "\nOptions:\n"
+	echo "-l, --log <logfile>       specific log file"
+	echo "-u, --user <username>     the user for this installer"
+	echo ""
+	echo "-h, --help                display this help and exit"
+}
+################################################################################
+# INSTALL FUNCTIONS
+################################################################################
+function _lockCheck() {
+	if [[ -f "/install/.${username}.${APP_NAME}.lock" ]]; then
+		_error "${APP_TITLE} already installed !"
+		exit 1
+	fi
+	if [[ ! -f /install/.pyenv.lock ]]; then
+		_warning "Automatically install pyenv... "
+		bash /usr/local/bin/quickbox/package/install/installpackage-pyenv
+	fi
+	if [[ -f "/install/.install.lock" ]]; then
+		prevApp=$(cat /install/.install.lock)
+		_info "$prevApp process running."
+		_info "If you believe this to be in error, please manually remove the /install/.install.lock"
+		_error "Exiting..."
+		exit 1
+	fi
+}
+function _setLock() {
+	echo "${APP_TITLE}" >/install/.install.lock
+}
+function _lockCleanup() {
+	if [[ -f /install/.lang_zh.lock ]]; then
+		_info "定时任务用法参见: https://github.com/amefs/quickbox-lite/wiki/%E5%B8%B8%E8%A7%81%E9%97%AE%E9%A2%98#%E5%A6%82%E4%BD%95%E4%BD%BF%E7%94%A8-autoremove-torrents"
+	else
+		_info "See cronjob example here: https://github.com/amefs/quickbox-lite/wiki/FAQ#how-to-use-autoremove-torrents"
+	fi
+	echo "$APP_TITLE Install Complete!
+
+
+Close this dialog box to refresh your browser" >>"${OUTTO}" 2>&1
+	rm -f /install/.install.lock
+}
+
+function _installPy(){
+	version=$1
+	major_version=$(echo ${version}| cut -d. -f1)
+	source /root/.bash_pyenv
+	versions=$(/opt/pyenv/bin/pyenv versions)
+	if [[ ! $versions =~ $version ]]; then
+	_info "Preparing Python $version. This may take some time ... "
+		_execute "/opt/pyenv/bin/pyenv install $version"
+		_success "Python ${version} installed"
+		if [[ ${major_version} == "2" ]]; then
+			_execute "/opt/pyenv/versions/${version}/bin/python${major_version} -m pip install virtualenv"
+			_success "Python ${version} virtualenv installed"
+		fi
+	else
+		_success "Python ${version} already installed"
+	fi
+}
+
+function _initPyVenv() {
+	version=$1
+	major_version=$(echo ${version}| cut -d. -f1)
+	path=$2
+	user=$3
+	mkdir -p ${path}
+	source /root/.bash_pyenv
+	if [[ ${major_version} == "2" ]]; then
+		_execute "/opt/pyenv/versions/${version}/bin/python${major_version} -m virtualenv $path"
+	elif [[ ${major_version} == "3" ]]; then
+		_execute "/opt/pyenv/versions/${version}/bin/python3 -m venv $path"
+	fi
+	chown -R ${user}.${user} $path
+	_success "Python virtual environment setup finished"
+}
+
+function _installInfo() {
+	_print "
+$APP_TITLE will now be installed.
+
+This process may take a few minutes
+Please wait until the process is completed
+"
+}
+
+function _installAddSources() {
+	_info "Adding additional keys and sources ${APP_TITLE}..."
+	_success "Keys and sources added."
+}
+
+function _installSystemUpdates() {
+	_info "Checking and performing updates to system... "
+	DEBIAN_FRONTEND=noninteractive apt-get -yqq -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" update >/dev/null 2>&1
+	DEBIAN_FRONTEND=noninteractive apt-get -yqq -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" upgrade >/dev/null 2>&1
+	## auto solve lock
+	if [ "$?" -eq 2 ]; then
+		_warning "dpkg database is locked."
+		_info "fixing dpkg lock..."
+		rm -f /var/lib/dpkg/updates/0*
+		locks=$(find /var/lib/dpkg/lock* && find /var/cache/apt/archives/lock*)
+		if [[ ${locks} == $(find /var/lib/dpkg/lock* && find /var/cache/apt/archives/lock*) ]]; then
+			for l in ${locks}; do
+				rm -rf ${l}
+			done
+			_execute "dpkg --configure -a"
+			DEBIAN_FRONTEND=noninteractive apt-get -yqq -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" update >/dev/null 2>&1
+			DEBIAN_FRONTEND=noninteractive apt-get -yqq -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" upgrade >/dev/null 2>&1
+		fi
+		if ! (apt-get check >/dev/null); then
+			apt-get install -f >>"${OUTTO}" 2>&1
+			if ! (apt-get check >/dev/null); then
+				whiptail --title "$ERROR_TITLE_INSTALL" --msgbox "$ERROR_TEXT_INSTALL_1" --ok-button "$BUTTON_OK" 8 72
+				exit 1
+			fi
+		fi
+	fi
+	_success "System updated."
+}
+
+function _installDepends() {
+	_info "Installing ${APP_TITLE} dependencies..."
+	local DEPLIST="${APP_BASEDEPS}"
+	for depend in $DEPLIST; do
+		_info "Installing ${depend}... "
+		_execute "apt-get -y --allow-unauthenticated -f install ${depend}" || { _error "Could not install ${depend}." && dependError=1; }
+	done
+	if [[ $dependError != "1" ]]; then
+		_success "${APP_TITLE} dependencies installed."
+	else
+		_error "${APP_TITLE} dependencies failed to install."
+		exit 1
+	fi
+}
+
+function _installApp() {
+	_info "Building ${APP_TITLE}..."
+
+	# Install for single user
+	_installPy 3.7.7
+	_initPyVenv 3.7.7 /home/${username}/.local/autoremovetorrents ${username}
+	chown -R ${username}.${username} /home/${username}/.local
+	cd /home/${username}/.local/autoremovetorrents
+	_info "Installing requirements... "
+	sudo -u ${username} -H bash -c "wget -q -O get-pip.py https://bootstrap.pypa.io/get-pip.py" >>"${OUTTO}" 2>&1
+	sudo -u ${username} -H bash -c "/home/${username}/.local/autoremovetorrents/bin/python get-pip.py --force-reinstall" >>"${OUTTO}" 2>&1
+	sudo -u ${username} -H bash -c "/home/${username}/.local/autoremovetorrents/bin/pip install --upgrade pip" >>"${OUTTO}" 2>&1
+	_info "Installing ${APP_TITLE}... "
+	sudo -u ${username} -H bash -c "/home/${username}/.local/autoremovetorrents/bin/pip install --upgrade autoremove-torrents" >>"${OUTTO}" 2>&1
+	if [[ -f /install/.deluge.lock ]]; then
+		sudo -u ${username} -H bash -c "/home/${username}/.local/autoremovetorrents/bin/pip install deluge-client" >>"${OUTTO}" 2>&1
+	fi
+	_success "${APP_TITLE} Built."
+}
+
+function _configureApp() {
+	_info "Configuring ${APP_TITLE}..."
+	pypath=/home/${username}/.local/autoremovetorrents
+	pybin=/home/${username}/.local/autoremovetorrents/bin
+	pylib=/home/${username}/.local/autoremovetorrents/lib
+	passphrase=$(cat /root/.ssh/local_user)
+	passtext=$(cat /root/.qbuser/${username}.info | cut -d: -f2)
+	if [[ $CODENAME == xenial ]]; then
+		password=$(echo ${passtext} | openssl enc -aes-128-ecb -a -d -pass pass:${passphrase} -nosalt)
+	else
+		password=$(echo ${passtext} | openssl enc -aes-128-ecb -pbkdf2 -a -d -pass pass:${passphrase} -nosalt)
+	fi
+
+	# get used port
+	local usedport=""
+	if (find /install/ -type f | grep -q .$APP_NAME.port); then
+		usedport=$(cat $(find /install/ -type f | grep .$APP_NAME.port))
+	fi
+	# generate available port
+	if [[ -f /install/.qbittorrent.lock ]]; then
+		qbport=$(cat /install/${username}.qbittorrent.port)
+	else
+		qbport="QBPORT"
+	fi
+	if [[ -f /install/.deluge.lock ]]; then
+		deport=$(cat /install/${username}.deluged.port)
+	else
+		deport="DEPORT"
+	fi
+	if [[ -f /install/.transmission.lock ]]; then
+		trport=$(cat /install/${username}.transmission.port)
+	else
+		trport="TRPORT"
+	fi
+
+	mkdir -p /home/${username}/.config/autoremovetorrents/
+	mkdir -p /home/${username}/.config/autoremovetorrents/logs
+	cat >/home/${username}/.config/autoremovetorrents/config.yml <<EOF
+# For more usages, check the offical site: https://autoremove-torrents.readthedocs.io
+
+# client templates
+# deluge:
+#   client: deluge
+#   host: 127.0.0.1:$deport
+#   username: ${username}
+#   password: ${password}
+# qbittorrent:
+#   client: qbittorrent
+#   host: http://127.0.0.1:$qbport
+#   username: ${username}
+#   password: ${password}
+# transmission:
+#   client: transmission
+#   host: http://127.0.0.1:$trport
+#   username: ${username}
+#   password: ${password}
+
+# Example1:
+#   client: deluge
+#   host: 127.0.0.1:$deport                                     # without "http://" or "https://"
+#   username: ${username}
+#   password: ${password}
+#   strategies:
+#     delete_by_seedsize:
+#       trackers:
+#         - tracker.hdsky.me                                     # without "http://" or "https://"
+#       seed_size:
+#         limit: 3000                                            # size in GiB
+#         action: remove-old-seeds
+#     delete_by_seedtime:
+#       categories:
+#         - hdsky
+#       seeding_time: 259200                                     # time in Second
+#   delete_data: true
+
+Example2:
+  client: qbittorrent
+  host: http://127.0.0.1:$qbport
+  username: ${username}
+  password: ${password}
+  strategies:
+    delete_by_restspace:
+      free_space:
+        min: 100                                               # size in GiB
+        path: /home/${username}/torrents/qbittorrent/          # This Path MUST EXIST
+        action: remove-old-seeds
+    delete_by_peernumber:
+      status:
+        - Downloading
+      remove: connected_leecher < 2 or seeder > 1
+    delete_by_speed:
+      status:
+        - Downloading
+      remove: download_speed > 20480 and upload_speed < 20480  # KiB per Second
+  delete_data: true
+
+Example3:
+  client: transmission
+  host: http://127.0.0.1:$trport
+  username: ${username}
+  password: ${password}
+  strategies:
+    delete_by_crosscheck:
+      status:
+        - Checking
+      remove: progress > 1                                     # Percentage(%)
+  delete_data: false
+EOF
+
+	chown ${username}.${username} -R /home/${username}/.config/autoremovetorrents/
+
+	_success "${APP_TITLE} configured."
+}
+
+function _installAppLock() {
+	_info "Configuring ${APP_TITLE} lock..."
+	touch /install/.${username}.${APP_NAME}.lock
+	_success "${APP_TITLE} lock configured."
+}
+
+#################################################################################
+# OPT GENERATOR
+#################################################################################
+if ! ARGS=$(getopt -a -o hl:u: -l help,log:,user: -- "$@")
+then
+    _usage
+    exit 1
+fi
+eval set -- "${ARGS}"
+while true; do
+	case "$1" in
+	-h | --help)
+		_usage
+		exit 1
+		;;
+	-l | --log)
+		OUTTO="$2"
+		shift
+		;;
+	-u | --user)
+		username="$2"
+		shift
+		;;
+	--)
+		shift
+		break
+		;;
+	esac
+	shift
+done
+
+#################################################################################
+# MAIN PROCESS
+#################################################################################
+_lockCheck
+_setLock
+_installInfo
+_installSystemUpdates
+_installApp
+_configureApp
+_installAppLock
+_lockCleanup

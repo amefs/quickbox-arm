@@ -47,7 +47,7 @@ _green=$(tput setaf 2)
 _tan=$(tput setaf 3)
 _cyan=$(tput setaf 6)
 
-function _excute() {
+function _execute() {
 	($1 >>"${OUTTO}" 2>&1)
 }
 function _print() {
@@ -85,7 +85,8 @@ APP_DAEMON_PORT_HIGH="55050"
 
 APP_LOCK=.$APP_NAME.lock
 OUTTO=/srv/dashboard/db/output.log
-version=0.9.6
+version=0.9.8
+cdn=$(cat /install/.cdn.lock)
 
 ################################################################################
 # SCRIPT FUNCTIONS
@@ -113,6 +114,10 @@ function _usage() {
 	echo "-g, --gui                 use a menu configuration to install"
 	echo "-l, --log <logfile>       specific log file"
 	echo "-v, --version <version>   the application version you want to install"
+	echo "--with-cf                 use cloudflare instead of github"
+	echo "--with-sf                 use sourceforge instead of github"
+	echo "--with-osdn               use osdn(jp)  instead of github"
+	echo "--with-github             use github"
 	echo ""
 	echo "-h, --help                display this help and exit"
 }
@@ -172,7 +177,7 @@ function _installSystemUpdates() {
 			for l in ${locks}; do
 				rm -rf ${l}
 			done
-			_excute "dpkg --configure -a"
+			_execute "dpkg --configure -a"
 			DEBIAN_FRONTEND=noninteractive apt-get -yqq -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" update >/dev/null 2>&1
 			DEBIAN_FRONTEND=noninteractive apt-get -yqq -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" upgrade >/dev/null 2>&1
 		fi
@@ -192,7 +197,7 @@ function _installDepends() {
 	local DEPLIST="${APP_BASEDEPS}"
 	for depend in $DEPLIST; do
 		_info "Installing ${depend}... "
-		_excute "apt-get -y --allow-unauthenticated -f install ${depend}" || { _error "Could not install ${depend}." && dependError=1; }
+		_execute "apt-get -y --allow-unauthenticated -f install ${depend}" || { _error "Could not install ${depend}." && dependError=1; }
 	done
 	if [[ $dependError != "1" ]]; then
 		_success "${APP_TITLE} dependencies installed."
@@ -207,14 +212,111 @@ function _installFpm() {
 	exit=$?
 	if [[ ! $exit == '0' ]]; then
 		_info "Installing fpm package management..."
-		_excute "apt-get install -yqq ruby ruby-dev rubygems build-essential"
-		_excute "gem install --no-ri --no-rdoc fpm"
+		_execute "apt-get install -yqq ruby ruby-dev rubygems build-essential"
+		_execute "gem install -N fpm"
 		_success "fpm installed."
 	fi
 }
 
+function _cf() {
+	DOMAIN="deb.ezapi.net"
+	SUBFOLDER=""
+	ARCH="armhf"
+	SUFFIX=""
+}
+
+function _sf() {
+	DOMAIN="sourceforge.net"
+	SUBFOLDER="projects/seedbox-software-for-linux/files/"
+	ARCH="armhf"
+	SUFFIX="/download"
+}
+
+function _osdn() {
+	DOMAIN="osdn.dl.osdn.net"
+	SUBFOLDER="storage/g/s/se/seedbox-software-for-linux/"
+	ARCH="armhf"
+	SUFFIX=""
+}
+
+function _github() {
+	DOMAIN="raw.githubusercontent.com"
+	SUBFOLDER="amefs/quickbox-files/master/"
+	ARCH="armhf"
+	SUFFIX=""
+}
+
+function _download() {
+	# init download url
+	PACKAGE=$1
+	DEB=$2
+	case "$cdn" in
+	"cf")
+		_cf
+		wget -t3 -T20 -q -O ${DEB} https://${DOMAIN}/${SUBFOLDER}${CODENAME}/binary-${ARCH}/${PACKAGE}/${DEB}${SUFFIX}
+		if [ $? -ne 0 ]; then
+			_github
+			wget -t5 -T10 -q -O ${DEB} https://${DOMAIN}/${SUBFOLDER}${CODENAME}/binary-${ARCH}/${PACKAGE}/${DEB}${SUFFIX}
+			if [ $? -ne 0 ]; then
+				_sf
+				wget -t5 -T10 -q -O ${DEB} https://${DOMAIN}/${SUBFOLDER}${CODENAME}/binary-${ARCH}/${PACKAGE}/${DEB}${SUFFIX}
+			fi
+		fi
+		;;
+	"sf")
+		_sf
+		wget -t3 -T10 -q -O ${DEB} https://${DOMAIN}/${SUBFOLDER}${CODENAME}/binary-${ARCH}/${PACKAGE}/${DEB}${SUFFIX}
+		if [ $? -ne 0 ]; then
+			_github
+			wget -t5 -T20 -q -O ${DEB} https://${DOMAIN}/${SUBFOLDER}${CODENAME}/binary-${ARCH}/${PACKAGE}/${DEB}${SUFFIX}
+			if [ $? -ne 0 ]; then
+				_cf
+				wget -t5 -T10 -q -O ${DEB} https://${DOMAIN}/${SUBFOLDER}${CODENAME}/binary-${ARCH}/${PACKAGE}/${DEB}${SUFFIX}
+			fi
+		fi
+		;;
+	"osdn")
+		_osdn
+		wget -t3 -T10 -q -O ${DEB} https://${DOMAIN}/${SUBFOLDER}${CODENAME}/binary-${ARCH}/${PACKAGE}/${DEB}${SUFFIX}
+		if [ $? -ne 0 ]; then
+			_github
+			wget -t5 -T20 -q -O ${DEB} https://${DOMAIN}/${SUBFOLDER}${CODENAME}/binary-${ARCH}/${PACKAGE}/${DEB}${SUFFIX}
+			if [ $? -ne 0 ]; then
+				_cf
+				wget -t5 -T10 -q -O ${DEB} https://${DOMAIN}/${SUBFOLDER}${CODENAME}/binary-${ARCH}/${PACKAGE}/${DEB}${SUFFIX}
+			fi
+		fi
+		;;
+	"github")
+		_github
+		wget -t3 -T10 -q -O ${DEB} https://${DOMAIN}/${SUBFOLDER}${CODENAME}/binary-${ARCH}/${PACKAGE}/${DEB}${SUFFIX}
+		if [ $? -ne 0 ]; then
+			_cf
+			wget -t5 -T20 -q -O ${DEB} https://${DOMAIN}/${SUBFOLDER}${CODENAME}/binary-${ARCH}/${PACKAGE}/${DEB}${SUFFIX}
+			if [ $? -ne 0 ]; then
+				_sf
+				wget -t5 -T10 -q -O ${DEB} https://${DOMAIN}/${SUBFOLDER}${CODENAME}/binary-${ARCH}/${PACKAGE}/${DEB}${SUFFIX}
+			fi
+		fi
+		;;
+	*)
+		_github
+		wget -t3 -T10 -q -O ${DEB} https://${DOMAIN}/${SUBFOLDER}${CODENAME}/binary-${ARCH}/${PACKAGE}/${DEB}${SUFFIX}
+		if [ $? -ne 0 ]; then
+			_cf
+			wget -t5 -T20 -q -O ${DEB} https://${DOMAIN}/${SUBFOLDER}${CODENAME}/binary-${ARCH}/${PACKAGE}/${DEB}${SUFFIX}
+			if [ $? -ne 0 ]; then
+				_sf
+				wget -t5 -T10 -q -O ${DEB} https://${DOMAIN}/${SUBFOLDER}${CODENAME}/binary-${ARCH}/${PACKAGE}/${DEB}${SUFFIX}
+			fi
+		fi
+		;;
+	esac
+}
+
 function _installApp() {
 	_info "Building ${APP_TITLE}..."
+
 	# get app version
 	case ${version} in
 	feature-bind)
@@ -260,47 +362,51 @@ function _installApp() {
 		mkdir -p /root/pool
 		mkdir -p /root/dist
 		cd /tmp
-		_excute "git clone -b ${LTORRENT} ${BRANCH_LT} libtorrent"
+		_execute "git clone -b ${LTORRENT} ${BRANCH_LT} libtorrent"
 		cd libtorrent || { _error "Can not download libtorrent-rakshasa" && exit 1; }
-		_excute "./autogen.sh"
-		_excute "./configure --prefix=/usr --disable-debug"
+		_execute "./autogen.sh"
+		_execute "./configure --prefix=/usr --disable-debug"
 		LTVERSION=$(grep -Eo "AC_INIT\(libtorrent,.*" configure.ac | grep -Eo "[0-9.]+" | head -n1)
-		_excute "make -j$(nproc)"
-		_excute "make DESTDIR=/tmp/dist/libtorrent-rakshasa install"
-		fpm -f -C /tmp/dist/libtorrent-rakshasa -p /root/pool/libtorrent-rakshasa_${LTVERSION}.deb -s dir -t deb -n libtorrent-rakshasa --version ${LTVERSION} --description "libtorrent-rakshasa compiled by QuickBox ARM" >/dev/null 2>&1
-		_excute "dpkg -i /root/pool/libtorrent-rakshasa_${LTVERSION}.deb"
+		_execute "make -j$(nproc)"
+		_execute "make DESTDIR=/tmp/dist/libtorrent-rakshasa install"
+		fpm -f -C /tmp/dist/libtorrent-rakshasa -p /root/pool/libtorrent-rakshasa_${LTVERSION}.deb -s dir -t deb -n libtorrent-rakshasa --version ${LTVERSION} --description "libtorrent-rakshasa compiled by QuickBox Lite" >/dev/null 2>&1
+		_execute "dpkg -i /root/pool/libtorrent-rakshasa_${LTVERSION}.deb"
 		rm -rf /tmp/libtorrent
-		_excute "ldconfig"
+		_execute "ldconfig"
 
 		# rtorrent
 		cd /tmp
-		_excute "git clone -b ${RTVERSION} ${BRANCH_RT} rtorrent"
+		_execute "git clone -b ${RTVERSION} ${BRANCH_RT} rtorrent"
 		cd rtorrent || { _error "Can not download rTorrent" && exit 1; }
-		_excute "./autogen.sh"
-		_excute "./configure --prefix=/usr --with-xmlrpc-c --with-ncurses --disable-debug --enable-ipv6"
+		_execute "./autogen.sh"
+		_execute "./configure --prefix=/usr --with-xmlrpc-c --with-ncurses --disable-debug --enable-ipv6"
 		RTVERSION=$(grep -Eo "AC_INIT\(rtorrent,.*" configure.ac | grep -Eo "[0-9.]+" | head -n1)
-		_excute "make -j$(nproc)"
-		_excute "make DESTDIR=/tmp/dist/rtorrent install"
-		fpm -f -C /tmp/dist/rtorrent -p /root/pool/rtorrent_${RTVERSION}.deb -s dir -t deb -n rtorrent --version ${RTVERSION} --description "rtorrent compiled by QuickBox ARM" >/dev/null 2>&1
-		_excute "dpkg -i /root/pool/rtorrent_${RTVERSION}.deb"
+		_execute "make -j$(nproc)"
+		_execute "make DESTDIR=/tmp/dist/rtorrent install"
+		fpm -f -C /tmp/dist/rtorrent -p /root/pool/rtorrent_${RTVERSION}.deb -s dir -t deb -n rtorrent --version ${RTVERSION} --description "rtorrent compiled by QuickBox Lite" >/dev/null 2>&1
+		_execute "dpkg -i /root/pool/rtorrent_${RTVERSION}.deb"
 		rm -rf /tmp/rtorrent
 		rm -rf /tmp/dist
 	else
 		APP_BASEDEPS="screen unzip"
 		_installDepends
 		# get deb packages
+		PACKAGE="libtorrent-rakshasa"
+		DEB=${LTORRENTBIN}
 		cd /tmp
-		wget -q -O ${LTORRENTBIN} https://sourceforge.net/projects/seedbox-software-for-linux/files/${CODENAME}/binary-armhf/libtorrent-rakshasa/${LTORRENTBIN}/download
-		wget -q -O ${RTORRENTBIN} https://sourceforge.net/projects/seedbox-software-for-linux/files/${CODENAME}/binary-armhf/rtorrent/${RTORRENTBIN}/download
-		_excute "apt install -y /tmp/${LTORRENTBIN}"
-		_excute "apt install -y /tmp/${RTORRENTBIN}"
+		_download ${PACKAGE} ${DEB}
+		PACKAGE="rtorrent"
+		DEB=${RTORRENTBIN}
+		_download ${PACKAGE} ${DEB}
+		_execute "apt install -y /tmp/${LTORRENTBIN}"
+		_execute "apt install -y /tmp/${RTORRENTBIN}"
 		rm -rf {${LTORRENTBIN},${RTORRENTBIN}}
 		# disable auto upgrade
-		_excute "apt-mark hold rtorrent"
-		_excute "apt-mark hold libtorrent18"
-		_excute "apt-mark hold libtorrent19"
-		_excute "apt-mark hold libtorrent20"
-		_excute "apt-mark hold libtorrent21"
+		_execute "apt-mark hold rtorrent"
+		_execute "apt-mark hold libtorrent18"
+		_execute "apt-mark hold libtorrent19"
+		_execute "apt-mark hold libtorrent20"
+		_execute "apt-mark hold libtorrent21"
 	fi
 	_success "${APP_TITLE} Built."
 }
@@ -419,8 +525,8 @@ WorkingDirectory=/home/%I/
 [Install]
 WantedBy=multi-user.target
 EOF
-	_excute "systemctl daemon-reload"
-	_excute "nginx -s reload"
+	_execute "systemctl daemon-reload"
+	_execute "nginx -s reload"
 	_success "${APP_TITLE} configured."
 }
 
@@ -434,8 +540,8 @@ function _installAppStart() {
 	_info "Starting ${APP_TITLE}..."
 	userlist=$(cat $(find /root/.qbuser/ -type f) | cut -d: -f1)
 	for username in $userlist; do
-		_excute "systemctl enable ${APP_SERVICE}@${username}"
-		_excute "systemctl start ${APP_SERVICE}@${username}"
+		_execute "systemctl enable ${APP_SERVICE}@${username}"
+		_execute "systemctl start ${APP_SERVICE}@${username}"
 	done
 	_success "${APP_TITLE} started."
 }
@@ -443,7 +549,11 @@ function _installAppStart() {
 #################################################################################
 # OPT GENERATOR
 #################################################################################
-ARGS=$(getopt -a -o ghl:v: -l gui,help,log:,version: -- "$@")
+if ! ARGS=$(getopt -a -o ghl:v: -l gui,help,with-cf,with-sf,with-osdn,with-geithub,log:,version: -- "$@")
+then
+    _usage
+    exit 1
+fi
 eval set -- "${ARGS}"
 while true; do
 	case "$1" in
@@ -462,6 +572,18 @@ while true; do
 	-v | --version)
 		version="$2"
 		shift
+		;;
+	--with-cf)
+		cdn="cf"
+		;;
+	--with-sf)
+		cdn="sf"
+		;;
+	--with-osdn)
+		cdn="osdn"
+		;;
+	--with-github)
+		cdn="github"
 		;;
 	--)
 		shift

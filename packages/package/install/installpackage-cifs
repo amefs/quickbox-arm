@@ -1,0 +1,298 @@
+#!/bin/bash
+#
+# [QuickBox ARM Samba Server Installer]
+#
+# GitHub:   https://github.com/amefs/quickbox-arm
+# Author:   Amefs
+# Current version:  v1.0.0
+# URL:
+# Original Repo:    https://github.com/QuickBox/QB
+# Credits to:       QuickBox.io
+#
+#   Licensed under GNU General Public License v3.0 GPL-3 (in short)
+#
+#   You may copy, distribute and modify the software as long as you track
+#   changes/dates in source files. Any modifications to our software
+#   including (via compiler) GPL-licensed code must also be made available
+#   under the GPL along with build & install instructions.
+#
+#################################################################################
+################################################################################
+# HELP FUNCTIONS
+################################################################################
+export NEWT_COLORS='
+root=,black
+window=,lightgray
+shadow=,color8
+title=color8,
+checkbox=,magenta
+entry=,color8
+label=blue,
+actlistbox=,magenta
+actsellistbox=,magenta
+helpline=,magenta
+roottext=,magenta
+emptyscale=magenta
+disabledentry=magenta,
+'
+
+_norm=$(tput sgr0)
+_red=$(tput setaf 1)
+_green=$(tput setaf 2)
+_tan=$(tput setaf 3)
+_cyan=$(tput setaf 6)
+
+function _execute() {
+	($1 >>"${OUTTO}" 2>&1)
+}
+function _print() {
+	printf "${_norm}%s${_norm}\n" "$@"
+	printf "%s\n" "$@" >>"${OUTTO}"
+}
+function _info() {
+	printf "${_cyan}➜ %s${_norm}\n" "$@"
+	printf ">> Info: %s\n" "$@" >>"${OUTTO}"
+}
+function _success() {
+	printf "${_green}✓ %s${_norm}\n" "$@"
+	printf ">> Success: %s\n" "$@" >>"${OUTTO}"
+}
+function _warning() {
+	printf "${_tan}⚠ %s${_norm}\n" "$@"
+	printf ">> Warning: %s\n" "$@" >>"${OUTTO}"
+}
+function _error() {
+	printf "${_red}✗ %s${_norm}\n" "$@"
+	printf ">> Error: %s\n" "$@" >>"${OUTTO}"
+}
+
+#################################################################################
+# APP VARIABLE
+#################################################################################
+APP_TITLE="Samba Server"
+APP_NAME="samba"
+APP_SERVICE="samba"
+APP_BASEDEPS="samba"
+
+APP_LOCK=.$APP_NAME.lock
+OUTTO=/srv/dashboard/db/output.log
+username=$(cat /root/.admin.info | cut -d: -f1)
+
+################################################################################
+# SCRIPT FUNCTIONS
+################################################################################
+function _usage() {
+	echo -e "\nQuickBox ARM $APP_TITLE Installer"
+	echo -e "\nUsage: \n$(basename "$0") [-h] [-u username] [-l logfile]"
+	echo -e "\nOptions:\n"
+	echo "-l, --log <logfile>       specific log file"
+	echo "-u, --user <username>     the user for this installer"
+	# not required by multi-user applications
+	echo ""
+	echo "-h, --help                display this help and exit"
+}
+################################################################################
+# INSTALL FUNCTIONS
+################################################################################
+function _lockCheck() {
+	if [[ -f "/install/.install.lock" ]]; then
+		prevApp=$(cat /install/.install.lock)
+		_info "$prevApp process running."
+		_info "If you believe this to be in error, please manually remove the /install/.install.lock"
+		_error "Exiting..."
+		exit 1
+	fi
+}
+function _setLock() {
+	echo "${APP_TITLE}" >/install/.install.lock
+}
+function _lockCleanup() {
+	echo "$APP_TITLE Install Complete!
+
+
+Close this dialog box to refresh your browser" >>"${OUTTO}" 2>&1
+	rm -f /install/.install.lock
+}
+
+function _installInfo() {
+	_print "
+$APP_TITLE will now be installed.
+
+This process may take a few minutes
+Please wait until the process is completed
+"
+}
+
+function _installSystemUpdates() {
+	_info "Checking and performing updates to system... "
+	DEBIAN_FRONTEND=noninteractive apt-get -yqq -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" update >/dev/null 2>&1
+	DEBIAN_FRONTEND=noninteractive apt-get -yqq -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" upgrade >/dev/null 2>&1
+	## auto solve lock
+	if [ "$?" -eq 2 ]; then
+		_warning "dpkg database is locked."
+		_info "fixing dpkg lock..."
+		rm -f /var/lib/dpkg/updates/0*
+		locks=$(find /var/lib/dpkg/lock* && find /var/cache/apt/archives/lock*)
+		if [[ ${locks} == $(find /var/lib/dpkg/lock* && find /var/cache/apt/archives/lock*) ]]; then
+			for l in ${locks}; do
+				rm -rf ${l}
+			done
+			_execute "dpkg --configure -a"
+			DEBIAN_FRONTEND=noninteractive apt-get -yqq -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" update >/dev/null 2>&1
+			DEBIAN_FRONTEND=noninteractive apt-get -yqq -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" upgrade >/dev/null 2>&1
+		fi
+		if ! (apt-get check >/dev/null); then
+			apt-get install -f >>"${OUTTO}" 2>&1
+			if ! (apt-get check >/dev/null); then
+				whiptail --title "$ERROR_TITLE_INSTALL" --msgbox "$ERROR_TEXT_INSTALL_1" --ok-button "$BUTTON_OK" 8 72
+				exit 1
+			fi
+		fi
+	fi
+	_success "System updated."
+}
+
+function _installDepends() {
+	_info "Installing ${APP_TITLE} dependencies..."
+	local DEPLIST="${APP_BASEDEPS}"
+	for depend in $DEPLIST; do
+		_info "Installing ${depend}... "
+		_execute "apt-get -y --allow-unauthenticated -f install ${depend}" || { _error "Could not install ${depend}." && dependError=1; }
+	done
+	if [[ $dependError != "1" ]]; then
+		_success "${APP_TITLE} dependencies installed."
+	else
+		_error "${APP_TITLE} dependencies failed to install."
+		exit 1
+	fi
+}
+
+function _configureApp() {
+	_info "Configuring ${APP_TITLE}..."
+	passphrase=$(cat /root/.ssh/local_user)
+	passtext=$(cat /root/.qbuser/${username}.info | cut -d: -f2)
+	if [[ $CODENAME == xenial ]]; then
+		password=$(echo ${passtext} | openssl enc -aes-128-ecb -a -d -pass pass:${passphrase} -nosalt)
+	else
+		password=$(echo ${passtext} | openssl enc -aes-128-ecb -pbkdf2 -a -d -pass pass:${passphrase} -nosalt)
+	fi
+	_execute "systemctl stop smbd"
+	# Gobal Conf
+	cat >/etc/samba/smb.conf <<'EOF'
+[global]
+workgroup = HOME
+server string = %h server
+dns proxy = no
+log level = 0
+syslog = 0
+log file = /var/log/samba/log.%m
+max log size = 1000
+syslog only = yes
+panic action = /usr/share/samba/panic-action %d
+encrypt passwords = true
+passdb backend = tdbsam
+obey pam restrictions = no
+unix password sync = no
+passwd program = /usr/bin/passwd %u
+passwd chat = *Enter\snew\s*\spassword:* %n\n *Retype\snew\s*\spassword:* %n\n *password\supdated\ssuccessfully* .
+pam password change = yes
+socket options = TCP_NODELAY IPTOS_LOWDELAY
+guest account = nobody
+load printers = no
+disable spoolss = yes
+printing = bsd
+printcap name = /dev/null
+unix extensions = yes
+wide links = no
+create mask = 0777
+directory mask = 0777
+use sendfile = yes
+aio read size = 16384
+aio write size = 16384
+null passwords = no
+local master = yes
+time server = no
+wins support = no
+EOF
+	# User Space
+	printf "${password}\n${password}\n" | smbpasswd -a -s ${username} >>"${OUTTO}"
+	cat >>/etc/samba/smb.conf <<EOF
+[${username}]
+path = /home/${username}/
+guest ok = no
+read only = no
+browseable = yes
+inherit acls = yes
+inherit permissions = no
+ea support = no
+store dos attributes = no
+printable = no
+create mask = 0755
+force create mode = 0644
+directory mask = 0755
+force directory mode = 0755
+hide dot files = yes
+valid users = "${username}"
+invalid users =
+read list =
+write list = "${username}"
+smb encrypt = required
+EOF
+	_success "${APP_TITLE} configured."
+}
+
+function _installAppLock() {
+	_info "Configuring ${APP_TITLE} lock..."
+	touch /install/.${APP_NAME}.lock
+	_success "${APP_TITLE} lock configured."
+}
+
+function _installAppStart() {
+	_info "Starting ${APP_TITLE}..."
+	_execute "systemctl start smbd"
+	_success "${APP_TITLE} started."
+}
+
+#################################################################################
+# OPT GENERATOR
+#################################################################################
+if ! ARGS=$(getopt -a -o hl:u: -l help,log:,user: -- "$@")
+then
+	_usage
+    exit 1
+fi
+eval set -- "${ARGS}"
+while true; do
+	case "$1" in
+	-h | --help)
+		_usage
+		exit 1
+		;;
+	-l | --log)
+		OUTTO="$2"
+		shift
+		;;
+	-u | --user)
+		username="$2"
+		shift
+		;;
+	--)
+		shift
+		break
+		;;
+	esac
+	shift
+done
+
+#################################################################################
+# MAIN PROCESS
+#################################################################################
+_lockCheck
+_setLock
+_installInfo
+_installSystemUpdates
+_installDepends
+_configureApp
+_installAppLock
+_installAppStart
+_lockCleanup

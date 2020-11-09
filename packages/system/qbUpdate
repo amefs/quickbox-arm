@@ -26,8 +26,13 @@ _green=$(tput setaf 2)
 _tan=$(tput setaf 3)
 _cyan=$(tput setaf 6)
 OUTTO=/srv/dashboard/db/output.log
+if [[ $1 == "--only-core" ]]; then
+	core=1
+else
+	core=0
+fi
 
-function _excute() {
+function _execute() {
 	($1 >>"${OUTTO}" 2>&1)
 }
 function _print() {
@@ -72,7 +77,7 @@ function _lockCleanup() {
 
 function _installSystemUpdates() {
 	_info "Checking and performing updates to system... "
-	_excute "dpkg --configure -a"
+	_execute "dpkg --configure -a"
 	DEBIAN_FRONTEND=noninteractive apt-get -yqq -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" update >>"${OUTTO}" 2>&1
 	DEBIAN_FRONTEND=noninteractive apt-get -yqq -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" upgrade >>"${OUTTO}" 2>&1
 	## auto solve lock
@@ -85,7 +90,7 @@ function _installSystemUpdates() {
 			for l in ${locks}; do
 				rm -rf ${l}
 			done
-			_excute "dpkg --configure -a"
+			_execute "dpkg --configure -a"
 			DEBIAN_FRONTEND=noninteractive apt-get -yqq -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" update >>"${OUTTO}" 2>&1
 			DEBIAN_FRONTEND=noninteractive apt-get -yqq -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" upgrade >>"${OUTTO}" 2>&1
 		fi
@@ -100,88 +105,14 @@ function _installSystemUpdates() {
 	_success "System updated."
 }
 
-function _updateRepo() {
-	_info "Updating QuickBox local repository..."
-	BRANCH="https://github.com/amefs/quickbox-arm.git"
-	if [[ ! -f /install/.developer.lock ]]; then
-		# update to dev branch
-		if [[ -d /etc/QuickBox ]]; then
-			cd /etc/QuickBox
-			_excute "git checkout master"
-			_excute "git reset --hard origin/master"
-			_excute "git pull"
-		else
-			_excute "git clone --recursive ${BRANCH} /etc/QuickBox"
-		fi
-	else
-		if [[ -d /etc/QuickBox ]]; then
-			cd /etc/QuickBox
-			_excute "git checkout development"
-			_excute "git reset --hard origin/development"
-			_excute "git pull"
-		else
-			_excute "git clone --recursive --branch development ${BRANCH} /etc/QuickBox"
-		fi
-	fi
-	dos2unix $(find ${local_prefix} -type f) >/dev/null 2>&1
-	_success "QuickBox local repository updated"
+function _preloadScript() {
+	source /usr/local/bin/quickbox/system/update/qbUpdateRepo
 }
 
-function _setPerm() {
-	_info "Adjust file permission..."
-	chmod +x $(find /usr/local/bin/quickbox/ -type f) >/dev/null 2>&1
-	_success "file permission updated"
-}
-
-function _bashrc() {
-	_info "Updating bashrc..."
-	mv /root/.bash_qb /root/.bash_qb.bak
-	\cp -f "${local_setup_template}"bash_qb.template /root/.bash_qb
-	_success "bashrc updated"
-}
-
-function _updateskel() {
-	_info "Updating skel..."
-	if [[ ! -d /etc/skel ]]; then
-		mkdir /etc/skel
-	fi
-	_excute "rsync -aP ${local_setup_template}skel/. /etc/skel/"
-	_success "bashrc updated"
-}
-
-function _updatedashboard() {
-	_info "Updating QuickBox dashboard..."
-	if (! grep -c 'location ^~ /db/master.txt' < /etc/nginx/apps/dashboard.conf > /dev/null); then
-		\cp -f ${local_setup_template}nginx/dashboard.conf.template /etc/nginx/apps/dashboard.conf
-	fi
-	cd /srv/dashboard || exit 1
-	_excute "rsync -aP --exclude=disk_data*.php --exclude=share.php --exclude=custom.menu.php --exclude=url.override.php --exclude=custom.css ${local_setup_dashboard}* /srv/dashboard"
-
-	if $(grep -Fxq "disk_total_space(\$location)" /srv/dashboard/widgets/disk_data.php); then
-		\cp ${local_setup_dashboard}widgets/disk_datah.php /srv/dashboard/widgets/disk_data.php
-	else
-		\cp ${local_setup_dashboard}widgets/disk_data.php /srv/dashboard/widgets/disk_data.php
-	fi
-
-	IFACE=$(cat /srv/dashboard/db/interface.txt)
-	sed -i "s/INETFACE/${IFACE}/g" /srv/dashboard/widgets/stat.php
-	sed -i "s/INETFACE/${IFACE}/g" /srv/dashboard/widgets/data.php
-	sed -i "s/INETFACE/${IFACE}/g" /srv/dashboard/widgets/bw_tables.php
-	sed -i "s/INETFACE/${IFACE}/g" /srv/dashboard/inc/config.php
-	if [[ -f /srv/rutorrent/home/db/.smoked.lock ]]; then
-		_excute "bash /usr/local/bin/quickbox/system/theme/themeSelect-smoked"
-	elif [[ -f /srv/rutorrent/home/db/.defaulted.lock ]]; then
-		_excute "bash /usr/local/bin/quickbox/system/theme/themeSelect-defaulted"
-	fi
-	chown -R www-data:www-data /srv/dashboard
-	_success "QuickBox dashboard updated"
-}
-
-function _updatelanguage() {
-	_info "Updating QuickBox language..."
-	dashlang=$(find /install -type f | grep -e "lang.*.lock" | cut -d "." -f 2)
-	bash /usr/local/bin/quickbox/system/box lang $dashlang
-	_success "QuickBox language updated"
+function _reloadScript() {
+	source /usr/local/bin/quickbox/system/update/qbUpdateRepo
+	source /usr/local/bin/quickbox/system/update/qbUpdateService
+	source /usr/local/bin/quickbox/system/update/qbUpdateDashboard
 }
 
 function _fin() {
@@ -193,9 +124,13 @@ function _fin() {
 	echo >>"${OUTTO}" 2>&1
 	echo >>"${OUTTO}" 2>&1
 	echo "Close this dialog box to refresh your browser" >>"${OUTTO}" 2>&1
-	sleep 5
-	_excute "systemctl restart php7.2-fpm"
-	_excute "nginx -s reload"
+	# schedule restart service
+	at now + 1 minute >>"${OUTTO}" 2>&1 <<EOF
+sleep 5;\
+/usr/local/bin/quickbox/system/auxiliary/php-fpm-cli -r 'opcache_reset();';\
+systemctl restart php7.4-fpm
+nginx -s reload
+EOF
 }
 
 # initialization environment
@@ -208,11 +143,17 @@ local_setup_dashboard=${local_prefix}setup/dashboard/
 #################################################################################
 _lockCheck
 _setLock
-_installSystemUpdates
+if [[ $core == 0 ]]; then
+	_installSystemUpdates
+fi
+_preloadScript
 _updateRepo
 _setPerm
 _bashrc
 _updateskel
+_reloadScript
+_updateservice
 _updatedashboard
 _updatelanguage
+_startservice
 _fin

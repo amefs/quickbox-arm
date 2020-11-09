@@ -48,7 +48,7 @@ _green=$(tput setaf 2)
 _tan=$(tput setaf 3)
 _cyan=$(tput setaf 6)
 
-function _excute() {
+function _execute() {
 	($1 >>"${OUTTO}" 2>&1)
 }
 function _print() {
@@ -86,6 +86,7 @@ APP_WEB_PORT_HIGH="15150"
 
 APP_LOCK=$(echo .$APP_NAME.lock)
 OUTTO=/srv/dashboard/db/output.log
+cdn=$(cat /install/.cdn.lock)
 
 ################################################################################
 # SCRIPT FUNCTIONS
@@ -96,6 +97,10 @@ function _usage() {
 	echo -e "\nOptions:\n"
 	echo "-l, --log <logfile>       specific log file"
 	echo "-p, --ppa                 use ppa source"
+	echo "--with-cf                 use cloudflare instead of github"
+	echo "--with-sf                 use sourceforge instead of github"
+	echo "--with-osdn               use osdn(jp)  instead of github"
+	echo "--with-github             use github"
 	echo ""
 	echo "-h, --help                display this help and exit"
 }
@@ -157,7 +162,7 @@ function _installSystemUpdates() {
 			for l in ${locks}; do
 				rm -rf ${l}
 			done
-			_excute "dpkg --configure -a"
+			_execute "dpkg --configure -a"
 			DEBIAN_FRONTEND=noninteractive apt-get -yqq -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" update >/dev/null 2>&1
 			DEBIAN_FRONTEND=noninteractive apt-get -yqq -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" upgrade >/dev/null 2>&1
 		fi
@@ -177,7 +182,7 @@ function _installDepends() {
 	local DEPLIST="${APP_BASEDEPS}"
 	for depend in $DEPLIST; do
 		_info "Installing ${depend}... "
-		_excute "apt-get -y --allow-unauthenticated -f install ${depend}" || { _error "Could not install ${depend}." && dependError=1; }
+		_execute "apt-get -y --allow-unauthenticated -f install ${depend}" || { _error "Could not install ${depend}." && dependError=1; }
 	done
 	if [[ $dependError != "1" ]]; then
 		_success "${APP_TITLE} dependencies installed."
@@ -187,31 +192,125 @@ function _installDepends() {
 	fi
 }
 
+function _cf() {
+	DOMAIN="deb.ezapi.net"
+	SUBFOLDER=""
+	ARCH="armhf"
+	SUFFIX=""
+}
+
+function _sf() {
+	DOMAIN="sourceforge.net"
+	SUBFOLDER="projects/seedbox-software-for-linux/files/"
+	ARCH="armhf"
+	SUFFIX="/download"
+}
+
+function _osdn() {
+	DOMAIN="osdn.dl.osdn.net"
+	SUBFOLDER="storage/g/s/se/seedbox-software-for-linux/"
+	ARCH="armhf"
+	SUFFIX=""
+}
+
+function _github() {
+	DOMAIN="raw.githubusercontent.com"
+	SUBFOLDER="amefs/quickbox-files/master/"
+	ARCH="armhf"
+	SUFFIX=""
+}
+
+function _download() {
+	# init download url
+	PACKAGE=$1
+	DEB=$2
+	case "$cdn" in
+	"cf")
+		_cf
+		wget -t3 -T20 -q -O ${DEB} https://${DOMAIN}/${SUBFOLDER}${CODENAME}/binary-${ARCH}/${PACKAGE}/${DEB}${SUFFIX}
+		if [ $? -ne 0 ]; then
+			_github
+			wget -t5 -T10 -q -O ${DEB} https://${DOMAIN}/${SUBFOLDER}${CODENAME}/binary-${ARCH}/${PACKAGE}/${DEB}${SUFFIX}
+			if [ $? -ne 0 ]; then
+				_sf
+				wget -t5 -T10 -q -O ${DEB} https://${DOMAIN}/${SUBFOLDER}${CODENAME}/binary-${ARCH}/${PACKAGE}/${DEB}${SUFFIX}
+			fi
+		fi
+		;;
+	"sf")
+		_sf
+		wget -t3 -T10 -q -O ${DEB} https://${DOMAIN}/${SUBFOLDER}${CODENAME}/binary-${ARCH}/${PACKAGE}/${DEB}${SUFFIX}
+		if [ $? -ne 0 ]; then
+			_github
+			wget -t5 -T20 -q -O ${DEB} https://${DOMAIN}/${SUBFOLDER}${CODENAME}/binary-${ARCH}/${PACKAGE}/${DEB}${SUFFIX}
+			if [ $? -ne 0 ]; then
+				_cf
+				wget -t5 -T10 -q -O ${DEB} https://${DOMAIN}/${SUBFOLDER}${CODENAME}/binary-${ARCH}/${PACKAGE}/${DEB}${SUFFIX}
+			fi
+		fi
+		;;
+	"osdn")
+		_osdn
+		wget -t3 -T10 -q -O ${DEB} https://${DOMAIN}/${SUBFOLDER}${CODENAME}/binary-${ARCH}/${PACKAGE}/${DEB}${SUFFIX}
+		if [ $? -ne 0 ]; then
+			_github
+			wget -t5 -T20 -q -O ${DEB} https://${DOMAIN}/${SUBFOLDER}${CODENAME}/binary-${ARCH}/${PACKAGE}/${DEB}${SUFFIX}
+			if [ $? -ne 0 ]; then
+				_cf
+				wget -t5 -T10 -q -O ${DEB} https://${DOMAIN}/${SUBFOLDER}${CODENAME}/binary-${ARCH}/${PACKAGE}/${DEB}${SUFFIX}
+			fi
+		fi
+		;;
+	"github")
+		_github
+		wget -t3 -T10 -q -O ${DEB} https://${DOMAIN}/${SUBFOLDER}${CODENAME}/binary-${ARCH}/${PACKAGE}/${DEB}${SUFFIX}
+		if [ $? -ne 0 ]; then
+			_cf
+			wget -t5 -T20 -q -O ${DEB} https://${DOMAIN}/${SUBFOLDER}${CODENAME}/binary-${ARCH}/${PACKAGE}/${DEB}${SUFFIX}
+			if [ $? -ne 0 ]; then
+				_sf
+				wget -t5 -T10 -q -O ${DEB} https://${DOMAIN}/${SUBFOLDER}${CODENAME}/binary-${ARCH}/${PACKAGE}/${DEB}${SUFFIX}
+			fi
+		fi
+		;;
+	*)
+		_github
+		wget -t3 -T10 -q -O ${DEB} https://${DOMAIN}/${SUBFOLDER}${CODENAME}/binary-${ARCH}/${PACKAGE}/${DEB}${SUFFIX}
+		if [ $? -ne 0 ]; then
+			_cf
+			wget -t5 -T20 -q -O ${DEB} https://${DOMAIN}/${SUBFOLDER}${CODENAME}/binary-${ARCH}/${PACKAGE}/${DEB}${SUFFIX}
+			if [ $? -ne 0 ]; then
+				_sf
+				wget -t5 -T10 -q -O ${DEB} https://${DOMAIN}/${SUBFOLDER}${CODENAME}/binary-${ARCH}/${PACKAGE}/${DEB}${SUFFIX}
+			fi
+		fi
+		;;
+	esac
+}
+
 function _installApp() {
 	_info "Building ${APP_TITLE}..."
+
 	if [[ ${ppa} == 1 ]]; then
 		_installDepends
 	else
 		# get deb packages
+		PACKAGE="transmission"
 		cd /tmp
-		TRCOMM=transmission-common_2.94-1mod1_all.deb
-		TRSCLI=transmission-cli_2.94-1mod1_armhf.deb
-		TRSDAEMON=transmission-daemon_2.94-1mod1_armhf.deb
-		wget -q -O ${TRCOMM} https://sourceforge.net/projects/seedbox-software-for-linux/files/${CODENAME}/binary-armhf/transmission/${TRCOMM}/download
-		wget -q -O ${TRSCLI} https://sourceforge.net/projects/seedbox-software-for-linux/files/${CODENAME}/binary-armhf/transmission/${TRSCLI}/download
-		wget -q -O ${TRSDAEMON} https://sourceforge.net/projects/seedbox-software-for-linux/files/${CODENAME}/binary-armhf/transmission/${TRSDAEMON}/download
-		_excute "apt install -y /tmp/${TRCOMM}"
-		_excute "apt install -y /tmp/${TRSCLI}"
-		_excute "apt install -y /tmp/${TRSDAEMON}"
-		rm -rf {${TRCOMM},${TRSCLI},${TRSDAEMON}}
+		DEBASE="transmission-common_2.94-1mod1_all.deb transmission-cli_2.94-1mod1_armhf.deb transmission-daemon_2.94-1mod1_armhf.deb"
+		for DEB in $DEBASE; do
+			_download ${PACKAGE} ${DEB}
+			_execute "apt-get -y --allow-unauthenticated -f install /tmp/${DEB}"
+			rm -rf /tmp/${DEB}
+		done
 	fi
 	_success "${APP_TITLE} Built."
 }
 
 function _configureApp() {
 	_info "Configuring ${APP_TITLE}..."
-	_excute "systemctl disable transmission-daemon"
-	_excute "systemctl stop transmission-daemon"
+	_execute "systemctl disable transmission-daemon"
+	_execute "systemctl stop transmission-daemon"
 	sleep 2
 	# install enhancement WebUI
 	echo 1 | bash -c "$(wget -qO- https://github.com/ronggang/transmission-web-control/raw/master/release/install-tr-control.sh)" >>"${OUTTO}" 2>&1
@@ -263,20 +362,21 @@ function _configureApp() {
     "download-dir": "/home/${username}/torrents/transmission",
     "download-limit": 100,
     "download-limit-enabled": 0,
-    "download-queue-enabled": true,
+    "download-queue-enabled": false,
     "download-queue-size": 5,
     "encryption": 1,
-    "idle-seeding-limit": 30,
+    "idle-seeding-limit": 1800,
     "idle-seeding-limit-enabled": false,
     "incomplete-dir": "/home/${username}/torrents/transmission",
     "incomplete-dir-enabled": false,
+	"lazy-bitfield-enabled": true, 
     "lpd-enabled": false,
-    "max-peers-global": 200,
-    "message-level": 1,
+    "message-level": 2,
+	"open-file-limit": 100000, 
     "peer-congestion-algorithm": "",
     "peer-id-ttl-hours": 6,
-    "peer-limit-global": 200,
-    "peer-limit-per-torrent": 50,
+    "peer-limit-global": 10000,
+    "peer-limit-per-torrent": 5000, 
     "peer-port": 51413,
     "peer-port-random-high": 65535,
     "peer-port-random-low": 49152,
@@ -286,7 +386,7 @@ function _configureApp() {
     "port-forwarding-enabled": false,
     "preallocation": 1,
     "prefetch-enabled": true,
-    "queue-stalled-enabled": true,
+    "queue-stalled-enabled": false,
     "queue-stalled-minutes": 30,
     "ratio-limit": 2,
     "ratio-limit-enabled": false,
@@ -306,7 +406,7 @@ function _configureApp() {
     "script-torrent-done-enabled": false,
     "script-torrent-done-filename": "",
     "seed-queue-enabled": false,
-    "seed-queue-size": 10,
+    "seed-queue-size": 5000, 
     "speed-limit-down": 100,
     "speed-limit-down-enabled": false,
     "speed-limit-up": 100,
@@ -316,8 +416,8 @@ function _configureApp() {
     "umask": 18,
     "upload-limit": 100,
     "upload-limit-enabled": 0,
-    "upload-slots-per-torrent": 14,
-    "utp-enabled": true,
+    "upload-slots-per-torrent": 2000,
+    "utp-enabled": false,
     "watch-dir": "/home/${username}/trwatch",
     "watch-dir-enabled": true
 }
@@ -351,9 +451,17 @@ location /${username}.transmission.downloads {
 }
 EOF
 		if [[ -f /install/.${username}.flexget.lock ]]; then
-			_excute "apt-get -y --allow-unauthenticated -f install python-pip"
-			_excute 'pip2 install transmissionrpc'
+			if [[ ! -f /install/.pyenv.lock ]]; then
+				_execute "apt-get -y --allow-unauthenticated -f install python-pip"
+				_execute 'pip2 install transmissionrpc'
+			else
+				sudo -u ${username} -H bash -c "/home/${username}/.local/flexget3/bin/pip install transmissionrpc" >>"${OUTTO}" 2>&1
+			fi
 			sed -i "s/TRPORT/${PORT}/g" /home/${username}/.config/flexget/config.yml
+			_execute "systemctl restart flexget@${username}"
+		fi
+		if [[ -f /install/.${username}.autoremovetorrents.lock ]]; then
+			sed -i "s/TRPORT/${PORT}/g" /home/${username}/.config/autoremovetorrents/config.yml
 		fi
 	done
 
@@ -385,8 +493,8 @@ ExecReload=/bin/kill -s HUP $MAINPID
 [Install]
 WantedBy=multi-user.target
 TSD
-	_excute "systemctl daemon-reload"
-	_excute "nginx -s reload"
+	_execute "systemctl daemon-reload"
+	_execute "nginx -s reload"
 	_success "${APP_TITLE} configured."
 }
 
@@ -400,8 +508,8 @@ function _installAppStart() {
 	_info "Starting ${APP_TITLE}..."
 	userlist=$(cat $(find /root/.qbuser/ -type f) | cut -d: -f1)
 	for username in $userlist; do
-		_excute "systemctl enable ${APP_SERVICE}@${username}"
-		_excute "systemctl start ${APP_SERVICE}@${username}"
+		_execute "systemctl enable ${APP_SERVICE}@${username}"
+		_execute "systemctl start ${APP_SERVICE}@${username}"
 	done
 	_success "${APP_TITLE} started."
 }
@@ -409,7 +517,11 @@ function _installAppStart() {
 #################################################################################
 # OPT GENERATOR
 #################################################################################
-ARGS=$(getopt -a -o hl:p -l help,log:,ppa -- "$@")
+if ! ARGS=$(getopt -a -o hl:p -l help,ppa,with-cf,with-sf,with-osdn,with-github,log: -- "$@")
+then
+	_usage
+    exit 1
+fi
 eval set -- "${ARGS}"
 while true; do
 	case "$1" in
@@ -423,6 +535,18 @@ while true; do
 		;;
 	-p | --ppa)
 		ppa=1
+		;;
+	--with-cf)
+		cdn="cf"
+		;;
+	--with-sf)
+		cdn="sf"
+		;;
+	--with-osdn)
+		cdn="osdn"
+		;;
+	--with-github)
+		cdn="github"
 		;;
 	--)
 		shift

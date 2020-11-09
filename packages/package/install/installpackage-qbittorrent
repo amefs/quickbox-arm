@@ -47,7 +47,7 @@ _green=$(tput setaf 2)
 _tan=$(tput setaf 3)
 _cyan=$(tput setaf 6)
 
-function _excute() {
+function _execute() {
 	($1 >>"${OUTTO}" 2>&1)
 }
 function _print() {
@@ -86,10 +86,10 @@ APP_WEB_PORT_HIGH="15200"
 
 APP_LOCK=.$APP_NAME.lock
 OUTTO=/srv/dashboard/db/output.log
-qbit_version_list=['4.1.7','4.1.8','4.1.9','4.1.9.1','4.2.0','4.2.1']
-libt_version_list=['1.1.13','1.1.14']
-qbitversion=4.2.1
-libtversion=1.1.13
+qbitversion=4.2.5
+libtversion=1.1.14
+libt_major_version=1.1
+cdn=$(cat /install/.cdn.lock)
 
 BRANCH_LT="https://github.com/arvidn/libtorrent.git"
 BRANCH_QBIT="https://github.com/qbittorrent/qBittorrent.git"
@@ -97,46 +97,17 @@ BRANCH_LIBQBPASS="https://github.com/KozakaiAya/libqbpasswd.git"
 ################################################################################
 # SCRIPT FUNCTIONS
 ################################################################################
-function _menuinstall() {
-	OUTTO=$(whiptail --title "Log" --inputbox "Specify a log path?\nENTER to make no changes" 10 72 3>&1 1>&2 2>&3)
-	if [[ $OUTTO == "" ]]; then
-		OUTTO=/srv/dashboard/db/output.log
-	fi
-	if (whiptail --title "Application Version" --yesno "Want to install a custom version of $APP_TITLE?" --defaultno 8 56); then
-		if [[ ! -f /install/.libtorrent-rasterbar9.lock || ! -f /install/.libtorrent-rasterbar.lock ]]; then
-			libtversion=$(whiptail --title "Libtorrent" --inputbox "Enter a Custom Libtorrent version\ne.g. 1.1.13" 10 64 3>&1 1>&2 2>&3)
-		elif [[ -f /install/.libtorrent-rasterbar9.lock ]]; then
-			libtversion=1.1.13
-		elif [[ -f /install/.libtorrent-rasterbar.lock ]]; then
-			libtversion=$(cat /install/.libtorrent-rasterbar.lock)
-		fi
-		qbitversion=$(whiptail --title "qBittorrent" --inputbox "Enter a Custom qBittorrent version\ne.g. 4.1.7" 10 64 3>&1 1>&2 2>&3)
-		if (_version_gt 1.1.0 ${libtversion}) && (_version_gt ${qbitversion} 4.1.3); then
-			_warning "qBittorrent ${qbitversion} not support my libtorrent 1.0.x, fallback to 4.1.3"
-			qbitversion=4.1.3
-		fi
-		if (_version_gt ${libtversion} 1.1.0) && (_version_gt 4.0.5 ${qbitversion}); then
-			_warning "qBittorrent ${qbitversion} not support my libtorrent 1.1.x, libtorrent fallback to 1.0.11"
-			libtversion=1.0.11
-		fi
-	else
-		qbitversion=4.1.7
-		if [[ -f /install/.libtorrent-rasterbar.lock ]]; then
-			libtversion=$(cat /install/.libtorrent-rasterbar.lock)
-		else
-			libtversion=1.1.13
-		fi
-	fi
-}
-
 function _usage() {
 	echo -e "\nQuickBox ARM $APP_TITLE Installer"
-	echo -e "\nUsage: \n$(basename "$0") [-h] [-l logfile] [-g gui] [--lt] [--qb]"
+	echo -e "\nUsage: \n$(basename "$0") [-h] [-l logfile] [--lt] [--qb]"
 	echo -e "\nOptions:\n"
-	echo "-g, --gui                 use a menu configuration to install"
 	echo "-l, --log <logfile>       specific log file"
 	echo "--lt <version>            the libtorrent version you want to install"
 	echo "--qb <version>            the qbittorrent version you want to install"
+	echo "--with-cf                 use cloudflare instead of github"
+	echo "--with-sf                 use sourceforge instead of github"
+	echo "--with-osdn               use osdn(jp)  instead of github"
+	echo "--with-github             use github"	
 	echo ""
 	echo "-h, --help                display this help and exit"
 }
@@ -190,7 +161,7 @@ function _installSystemUpdates() {
 			for l in ${locks}; do
 				rm -rf ${l}
 			done
-			_excute "dpkg --configure -a"
+			_execute "dpkg --configure -a"
 			DEBIAN_FRONTEND=noninteractive apt-get -yqq -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" update >/dev/null 2>&1
 			DEBIAN_FRONTEND=noninteractive apt-get -yqq -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" upgrade >/dev/null 2>&1
 		fi
@@ -210,7 +181,7 @@ function _installDepends() {
 	local DEPLIST="${APP_BASEDEPS}"
 	for depend in $DEPLIST; do
 		_info "Installing ${depend}... "
-		_excute "apt-get -y --allow-unauthenticated -f install ${depend}" || { _error "Could not install ${depend}." && dependError=1; }
+		_execute "apt-get -y --allow-unauthenticated -f install ${depend}" || { _error "Could not install ${depend}." && dependError=1; }
 	done
 	if [[ $dependError != "1" ]]; then
 		_success "${APP_TITLE} dependencies installed."
@@ -225,41 +196,208 @@ function _installFpm() {
 	exit=$?
 	if [[ ! $exit == '0' ]]; then
 		_info "Installing fpm package management..."
-		_excute "apt-get install -yqq ruby ruby-dev rubygems build-essential"
-		_excute "gem install --no-ri --no-rdoc fpm"
+		_execute "apt-get install -yqq ruby ruby-dev rubygems build-essential"
+		_execute "gem install -N fpm"
 		_success "fpm installed."
 	fi
 }
 
+function _cf() {
+	DOMAIN="deb.ezapi.net"
+	SUBFOLDER=""
+	ARCH="armhf"
+	SUFFIX=""
+}
+
+function _sf() {
+	DOMAIN="sourceforge.net"
+	SUBFOLDER="projects/seedbox-software-for-linux/files/"
+	ARCH="armhf"
+	SUFFIX="/download"
+}
+
+function _osdn() {
+	DOMAIN="osdn.dl.osdn.net"
+	SUBFOLDER="storage/g/s/se/seedbox-software-for-linux/"
+	ARCH="armhf"
+	SUFFIX=""
+}
+
+function _github() {
+	DOMAIN="raw.githubusercontent.com"
+	SUBFOLDER="amefs/quickbox-files/master/"
+	ARCH="armhf"
+	SUFFIX=""
+}
+
+function _download() {
+	# init download url
+	PACKAGE=$1
+	DEB=$2
+	case "$cdn" in
+	"cf")
+		_cf
+		wget -t3 -T20 -q -O ${DEB} https://${DOMAIN}/${SUBFOLDER}${CODENAME}/binary-${ARCH}/${PACKAGE}/${DEB}${SUFFIX}
+		if [ $? -ne 0 ]; then
+			_github
+			wget -t5 -T10 -q -O ${DEB} https://${DOMAIN}/${SUBFOLDER}${CODENAME}/binary-${ARCH}/${PACKAGE}/${DEB}${SUFFIX}
+			if [ $? -ne 0 ]; then
+				_sf
+				wget -t5 -T10 -q -O ${DEB} https://${DOMAIN}/${SUBFOLDER}${CODENAME}/binary-${ARCH}/${PACKAGE}/${DEB}${SUFFIX}
+			fi
+		fi
+		;;
+	"sf")
+		_sf
+		wget -t3 -T10 -q -O ${DEB} https://${DOMAIN}/${SUBFOLDER}${CODENAME}/binary-${ARCH}/${PACKAGE}/${DEB}${SUFFIX}
+		if [ $? -ne 0 ]; then
+			_github
+			wget -t5 -T20 -q -O ${DEB} https://${DOMAIN}/${SUBFOLDER}${CODENAME}/binary-${ARCH}/${PACKAGE}/${DEB}${SUFFIX}
+			if [ $? -ne 0 ]; then
+				_cf
+				wget -t5 -T10 -q -O ${DEB} https://${DOMAIN}/${SUBFOLDER}${CODENAME}/binary-${ARCH}/${PACKAGE}/${DEB}${SUFFIX}
+			fi
+		fi
+		;;
+	"osdn")
+		_osdn
+		wget -t3 -T10 -q -O ${DEB} https://${DOMAIN}/${SUBFOLDER}${CODENAME}/binary-${ARCH}/${PACKAGE}/${DEB}${SUFFIX}
+		if [ $? -ne 0 ]; then
+			_github
+			wget -t5 -T20 -q -O ${DEB} https://${DOMAIN}/${SUBFOLDER}${CODENAME}/binary-${ARCH}/${PACKAGE}/${DEB}${SUFFIX}
+			if [ $? -ne 0 ]; then
+				_cf
+				wget -t5 -T10 -q -O ${DEB} https://${DOMAIN}/${SUBFOLDER}${CODENAME}/binary-${ARCH}/${PACKAGE}/${DEB}${SUFFIX}
+			fi
+		fi
+		;;
+	"github")
+		_github
+		wget -t3 -T10 -q -O ${DEB} https://${DOMAIN}/${SUBFOLDER}${CODENAME}/binary-${ARCH}/${PACKAGE}/${DEB}${SUFFIX}
+		if [ $? -ne 0 ]; then
+			_cf
+			wget -t5 -T20 -q -O ${DEB} https://${DOMAIN}/${SUBFOLDER}${CODENAME}/binary-${ARCH}/${PACKAGE}/${DEB}${SUFFIX}
+			if [ $? -ne 0 ]; then
+				_sf
+				wget -t5 -T10 -q -O ${DEB} https://${DOMAIN}/${SUBFOLDER}${CODENAME}/binary-${ARCH}/${PACKAGE}/${DEB}${SUFFIX}
+			fi
+		fi
+		;;
+	*)
+		_github
+		wget -t3 -T10 -q -O ${DEB} https://${DOMAIN}/${SUBFOLDER}${CODENAME}/binary-${ARCH}/${PACKAGE}/${DEB}${SUFFIX}
+		if [ $? -ne 0 ]; then
+			_cf
+			wget -t5 -T20 -q -O ${DEB} https://${DOMAIN}/${SUBFOLDER}${CODENAME}/binary-${ARCH}/${PACKAGE}/${DEB}${SUFFIX}
+			if [ $? -ne 0 ]; then
+				_sf
+				wget -t5 -T10 -q -O ${DEB} https://${DOMAIN}/${SUBFOLDER}${CODENAME}/binary-${ARCH}/${PACKAGE}/${DEB}${SUFFIX}
+			fi
+		fi
+		;;
+	esac
+}
+
 function _installApp() {
 	_info "Building ${APP_TITLE}..."
-	# Libtorrent
-	if [[ ${libt_version_list[*]} =~ ${libtversion} && ! -f /install/.libtorrent-rasterbar.lock ]]; then
-		_info "Installing Libtorrent..."
-		cd /tmp || exit 1
-		if [[ ! -f /install/.libtorrent-rasterbar9.lock ]]; then
-			LIBTBIN=libtorrent-rasterbar9_${libtversion}-1build1_armhf.deb
-			wget -q -O ${LIBTBIN} https://sourceforge.net/projects/seedbox-software-for-linux/files/${CODENAME}/binary-armhf/libtorrent-rasterbar/${LIBTBIN}/download
-			_excute "apt install -y /tmp/${LIBTBIN}"
-			LIBTDEVBIN=libtorrent-rasterbar-dev_${libtversion}-1build1_armhf.deb
-			wget -q -O ${LIBTDEVBIN} https://sourceforge.net/projects/seedbox-software-for-linux/files/${CODENAME}/binary-armhf/libtorrent-rasterbar/${LIBTBIN}/download
-			_excute "apt install -y /tmp/${LIBTDEVBIN}"
-			rm -rf {${LIBTBIN},${LIBTDEVBIN}}
-			_excute "ldconfig"
+	_info "Fetching package list..."
+	cd /tmp || exit 1
+	wget -t3 -T20 -q -O packages.lst https://deb.ezapi.net/packages.lst
+	if [ $? -ne 0 ]; then
+		_github
+		wget -t5 -T10 -q -O packages.lst https://raw.githubusercontent.com/amefs/quickbox-files/master/packages.lst
+		if [ $? -ne 0 ]; then
+			_sf
+			wget -t5 -T10 -q -O packages.lst https://sourceforge.net/projects/seedbox-software-for-linux/files/packages.lst/download
 		fi
-		touch /install/.libtorrent-rasterbar9.lock
-	elif [[ ! ${libt_version_list[*]} =~ ${libtversion} && ! -f /install/.libtorrent-rasterbar.lock && ! -f /install/.libtorrent-rasterbar9.lock ]]; then
+	fi
+	# version check
+	qbit_major_version=$(echo ${qbitversion}| cut -d. -f1,2)
+	libt_major_version=$(echo ${libtversion}| cut -d. -f1,2)
+	if (_version_gt ${qbit_major_version} "4.2"); then
+		if (_version_gt "1.2.10" ${libtversion}); then
+			libtversion="1.2.10"
+			libt_major_version="1.2"
+			_warning "Use Libtorrent ${libtversion} against qBittorrent 4.3.x"
+		fi
+	fi
+	if [[ ${libt_major_version} == "1.1" ]]; then
+		qbit_version_list=$(cat packages.lst | grep -w qbittorrent-nox | grep ${CODENAME} | grep armhf | grep libt1.1 | awk '{ print $5}' | cut -d '-' -f1)
+	elif [[ ${libt_major_version} == "1.2" ]]; then
+		qbit_version_list=$(cat packages.lst | grep -w qbittorrent-nox | grep ${CODENAME} | grep armhf | grep libt1.2 | awk '{ print $5}' | cut -d '-' -f1)
+	fi
+	libt_version_list=$(cat packages.lst | grep -wE 'libtorrent-rasterbar[0-9]{1,2}' | grep ${CODENAME} | grep armhf | awk '{ print $5}')
+	rm -f packages.lst
+	# lock check
+	libt_compile_req=0
+	libt_deb_req=0
+	# .libtorrent-rasterbar.lock libtorrent-rasterbar by compiled
+	# .libtorrent-rasterbar9.lock libtorrent-rasterbar 1.1.x
+	# .libtorrent-rasterbar10.lock libtorrent-rasterbar 1.2.x
+	if [[ -f /install/.libtorrent-rasterbar.lock ]]; then
+		_success "Libtorrent already installed, Skip..."
+		##TODO check if version > request, block installation if not match
+	else
+		APP_TITLE="Libtorrent"
+		if $(echo "${libt_version_list[@]}" | grep -wq "${libtversion}"); then
+			if ([[ ${libt_major_version} == "1.1" ]] && [[ ! -f /install/.libtorrent-rasterbar9.lock ]]) || ([[ ${libt_major_version} == "1.2" ]] && [[ ! -f /install/.libtorrent-rasterbar10.lock ]]); then
+				libt_deb_req=1
+			fi
+		else
+			libt_compile_req=1
+		fi
+	fi
+
+	# Libtorrent
+	APP_TITLE="Libtorrent"
+	if [[ ${libt_deb_req} == 1 ]]; then
+		_info "Installing ${APP_TITLE}..."
+		PACKAGE="libtorrent-rasterbar"
 		cd /tmp || exit 1
+		if [[ ${libt_major_version} == "1.1" ]]; then
+			LIBTBIN=libtorrent-rasterbar9_${libtversion}-1build1_armhf.deb
+		elif [[ ${libt_major_version} == "1.2" ]]; then
+			LIBTBIN=libtorrent-rasterbar10_${libtversion}-1build1_armhf.deb
+		fi
+		DEB=${LIBTBIN}
+		_download ${PACKAGE} ${DEB}
+		_execute "apt-get -y --allow-unauthenticated --allow-downgrades -f install  /tmp/${LIBTBIN}"
+		LIBTDEVBIN=libtorrent-rasterbar-dev_${libtversion}-1build1_armhf.deb
+		DEB=${LIBTDEVBIN}
+		_download ${PACKAGE} ${DEB}
+		_execute "apt-get -y --allow-unauthenticated --allow-downgrades -f install  /tmp/${LIBTDEVBIN}"
+		rm -rf {${LIBTBIN},${LIBTDEVBIN}}
+		if [[ ${libt_major_version} == "1.1" ]]; then
+			touch /install/.libtorrent-rasterbar9.lock
+		elif [[ ${libt_major_version} == "1.2" ]]; then
+			touch /install/.libtorrent-rasterbar10.lock
+		fi
+	elif [ ${libt_compile_req} == 1 ]; then
+		cd /tmp || exit 1
+		APP_TITLE="Libtorrent"
 		# prepare package toolchain
-		APP_BASEDEPS="build-essential libgl1-mesa-dev libssl-dev libboost-dev libboost-system-dev libboost-chrono-dev libboost-random-dev libboost-python-dev python python-dev python3 python3-dev pkg-config automake libtool git screen libgeoip-dev zlib1g-dev"
+		APP_BASEDEPS="build-essential libgl1-mesa-dev libssl-dev libboost-dev libboost-system-dev libboost-chrono-dev libboost-random-dev libboost-python-dev python python-dev python3 python3-dev pkg-config automake libtool git libgeoip-dev zlib1g-dev"
 		_installDepends
 		_installFpm
 		if [ ${CODENAME} == 'xenial' ]; then
-			_excute "apt purge -y libssl-dev"
-			_excute "apt install -y libssl-dev=1.0.*"
+			_execute "apt purge -y libssl-dev"
+			_execute "apt install -y libssl-dev=1.0.*"
 		fi
-		_info "Build libtorrent for $APP_TITLE ... "
-		if _version_gt ${libtversion} 1.1.0; then
+		_info "Build libtorrent for Deluge ... "
+		if [[ ${libt_major_version} == "1.2" ]]; then
+			LTRC=RC_1_2
+			case ${libtversion} in
+			1.2.0) LTCIMMIT="3a1e546" ;;
+			1.2.1) LTCIMMIT="4b26829" ;;
+			1.2.2) LTCIMMIT="9c97055" ;;
+			1.2.3) LTCIMMIT="078f7b9" ;;
+			1.2.4) LTCIMMIT="ad83b1c" ;;
+			1.2.5) LTCIMMIT="bc66605" ;;
+			1.2.6) LTCIMMIT="b9b5443" ;;
+			1.2.7) LTCIMMIT="8e71015" ;;
+			*) LTCIMMIT="." ;;
+			esac
+		elif [[ ${libt_major_version} == "1.1" ]]; then
 			LTRC=RC_1_1
 			case ${libtversion} in
 			1.1.0) LTCIMMIT="2921caf" ;;
@@ -277,9 +415,9 @@ function _installApp() {
 			1.1.12) LTCIMMIT="4342725" ;;
 			1.1.13) LTCIMMIT="6f1250c" ;;
 			1.1.14) LTCIMMIT="244f0f1" ;;
-			*) LTCIMMIT="6f1250c" ;;
+			*) LTCIMMIT="." ;;
 			esac
-		else
+		elif [[ ${libt_major_version} == "1.0" ]]; then
 			LTRC=RC_1_0
 			case ${libtversion} in
 			1.0.0) LTCIMMIT="1633ee2" ;;
@@ -294,59 +432,61 @@ function _installApp() {
 			1.0.9) LTCIMMIT="b342192" ;;
 			1.0.10) LTCIMMIT="e650ecc" ;;
 			1.0.11) LTCIMMIT="4e90eb1" ;;
-			*) LTCIMMIT="4e90eb1" ;;
+			*) LTCIMMIT="." ;;
 			esac
 		fi
 		mkdir -p /root/pool
 		mkdir -p /tmp/dist
 
 		cd /tmp || exit 1
-		_excute "git clone -b ${LTRC} ${BRANCH_LT} libtorrent"
+		_execute "git clone -b ${LTRC} ${BRANCH_LT} libtorrent"
 		cd libtorrent || { _error "Can not download libtorrent-rasterbar" && exit 1; }
-		_excute "git checkout ${LTCIMMIT}"
-		wget --no-check-certificate -q -O libtorrent-rasterbar-${LTRC}.patch https://raw.githubusercontent.com/amefs/QB/master/setup/sources/libtorrent-rasterbar-${LTRC}.patch
-		patch -p1 <libtorrent-rasterbar-${LTRC}.patch >/dev/null
-		LTVERSION=$(grep -Eo "AC_INIT\(\[libtorrent-rasterbar\],.*" configure.ac | grep -Eo "[0-9.]+" | head -n1)
-		_excute "./autotool.sh"
-		_excute "./configure --enable-python-binding --with-lib-geoip --with-libiconv CXXFLAGS=-std=c++11 CPPFLAGS=-std=c++11 --prefix=/tmp/dist/libtorrent-rasterbar/usr/local"
-		_excute "make -j$(nproc)"
+		_execute "git checkout ${LTCIMMIT}"
+		# compile base package
+		if [[ ${libt_major_version} == "1.0" ]] || [[ ${libt_major_version} == "1.1" ]]; then
+			wget --no-check-certificate -q -O libtorrent-rasterbar-${LTRC}.patch https://raw.githubusercontent.com/amefs/QB/master/setup/sources/libtorrent-rasterbar-${LTRC}.patch
+			patch -p1 <libtorrent-rasterbar-${LTRC}.patch >/dev/null
+			_execute "./autotool.sh"
+			_execute "./configure --with-lib-geoip --with-libiconv CXXFLAGS=-std=c++11 CPPFLAGS=-std=c++11 --prefix=/tmp/dist/libtorrent-rasterbar/usr/local"
+		elif [[ ${libt_major_version} == "1.2" ]]; then
+			_execute "./autotool.sh"
+			_execute "./configure --with-lib-geoip --with-libiconv CXXFLAGS=-std=c++14 CPPFLAGS=-std=c++14 --prefix=/tmp/dist/libtorrent-rasterbar/usr/local"
+		fi
+		_execute "make -j$(nproc)"
 		mkdir -p /tmp/dist/libtorrent-rasterbar/usr/local
-		_excute "make install"
-		mv /tmp/dist/libtorrent-rasterbar/usr/local/lib/python2.7/site-packages /tmp/dist/libtorrent-rasterbar/usr/local/lib/python2.7/dist-packages
-		fpm -f -C /tmp/dist/libtorrent-rasterbar -p /root/pool/libtorrent-rasterbar_${LTVERSION}.deb -s dir -t deb -n libtorrent-rasterbar --version ${LTVERSION} --description "libtorrent-rasterbar compiled by QuickBox ARM" >/dev/null 2>&1
-		_excute "dpkg -i /root/pool/libtorrent-rasterbar_${LTVERSION}.deb"
+		_execute "make install"
+		fpm -f -C /tmp/dist/libtorrent-rasterbar -p /root/pool/libtorrent-rasterbar_${libtversion}.deb -s dir -t deb -n libtorrent-rasterbar --version ${libtversion} --description "libtorrent-rasterbar compiled by QuickBox ARM" >>${OUTTO} 2>&1
+		_execute "dpkg -i /root/pool/libtorrent-rasterbar_${libtversion}.deb"
 		echo ${libtversion} >/install/.libtorrent-rasterbar.lock
-		_excute "ldconfig"
-		cd /tmp
-		rm -rf {libtorrent,dist}
-		_success "Libtorrent Built."
+		_success "Libtorrent built ..."
+		ldconfig
 	fi
 
 	# qBittorrent
-	if [[ ${qbit_version_list[*]} =~ ${qbitversion} && ! -f /install/.libtorrent-rasterbar.lock ]]; then
+	APP_TITLE="qBittorrent"
+	if $(echo "${qbit_version_list[@]}" | grep -wq "${qbitversion}"); then
+		_info "Installing ${APP_TITLE}..."
 		cd /tmp
-		if [[ ! -f /install/.deluge.lock ]]; then
-			LIBTBIN=libtorrent-rasterbar9_${libtversion}-1build1_armhf.deb
-			wget -q -O ${LIBTBIN} https://sourceforge.net/projects/seedbox-software-for-linux/files/${CODENAME}/binary-armhf/libtorrent-rasterbar/${LIBTBIN}/download
-			_excute "apt install -y /tmp/${LIBTBIN}"
-			rm -rf ${LIBTBIN}
-		fi
 		if (_version_gt ${qbitversion} 4.1.9.1); then
 			if [[ "$CODENAME" =~ ("xenial"|"stretch") ]]; then
+				PACKAGE="qt5"
 				cd /tmp
 				QTBIN=qt512base_5.12.6-1basyskom1_armhf.deb
-				wget -q -O ${QTBIN} https://sourceforge.net/projects/seedbox-software-for-linux/files/${CODENAME}/binary-armhf/qt5/${QTBIN}/download
-				_excute "apt install -y /tmp/${QTBIN}"
+				DEB=${QTBIN}
+				_download ${PACKAGE} ${DEB}
+				_execute "apt-get -y --allow-unauthenticated --allow-downgrades -f install /tmp/${QTBIN}"
 				rm -rf ${QTBIN}
 			fi
 		fi
-		QBITBIN=qbittorrent-nox_${qbitversion}-libt1.1-1build1_armhf.deb
-		wget -q -O ${QBITBIN} https://sourceforge.net/projects/seedbox-software-for-linux/files/${CODENAME}/binary-armhf/qbittorrent/${QBITBIN}/download
-		_excute "apt install -y /tmp/${QBITBIN}"
+		PACKAGE="qbittorrent"
+		QBITBIN=qbittorrent-nox_${qbitversion}-libt${libt_major_version}-1build1_armhf.deb
+		DEB=${QBITBIN}
+		_download ${PACKAGE} ${DEB}
+		_execute "apt-get -y --allow-unauthenticated --allow-downgrades -f install /tmp/${QBITBIN}"
 		rm -rf ${QBITBIN}
 
 		# disable auto upgrade
-		_excute "apt-mark hold qbittorrent-nox"
+		_execute "apt-mark hold qbittorrent-nox"
 	else
 		# prepare package toolchain
 		APP_BASEDEPS="build-essential libgl1-mesa-dev libssl-dev libboost-dev libboost-system-dev libboost-chrono-dev libboost-random-dev libboost-python-dev python python-dev python3 python3-dev pkg-config automake libtool git screen libgeoip-dev qtbase5-dev qttools5-dev-tools libqt5svg5-dev zlib1g-dev"
@@ -366,27 +506,14 @@ LIST
 		_installFpm
 		if (_version_gt ${qbitversion} 4.1.9.1); then
 			if [[ "$CODENAME" =~ ("xenial"|"stretch") ]]; then
+				PACKAGE="qt5"
 				cd /tmp
-				QTBIN=qt512base_5.12.6-1basyskom1_armhf.deb
-				wget -q -O ${QTBIN} https://sourceforge.net/projects/seedbox-software-for-linux/files/${CODENAME}/binary-armhf/qt5/${QTBIN}/download
-				_excute "apt install -y /tmp/${QTBIN}"
-				rm -rf ${QTBIN}
-				QTBIN=qt512xmlpatterns_5.12.6-1basyskom1_armhf.deb
-				wget -q -O ${QTBIN} https://sourceforge.net/projects/seedbox-software-for-linux/files/${CODENAME}/binary-armhf/qt5/${QTBIN}/download
-				_excute "apt install -y /tmp/${QTBIN}"
-				rm -rf ${QTBIN}
-				QTBIN=qt512declarative_5.12.6-1basyskom1_armhf.deb
-				wget -q -O ${QTBIN} https://sourceforge.net/projects/seedbox-software-for-linux/files/${CODENAME}/binary-armhf/qt5/${QTBIN}/download
-				_excute "apt install -y /tmp/${QTBIN}"
-				rm -rf ${QTBIN}
-				QTBIN=qt512svg_5.12.6-1basyskom1_armhf.deb
-				wget -q -O ${QTBIN} https://sourceforge.net/projects/seedbox-software-for-linux/files/${CODENAME}/binary-armhf/qt5/${QTBIN}/download
-				_excute "apt install -y /tmp/${QTBIN}"
-				rm -rf ${QTBIN}
-				QTBIN=qt512tools_5.12.6-1basyskom1_armhf.deb
-				wget -q -O ${QTBIN} https://sourceforge.net/projects/seedbox-software-for-linux/files/${CODENAME}/binary-armhf/qt5/${QTBIN}/download
-				_excute "apt install -y /tmp/${QTBIN}"
-				rm -rf ${QTBIN}
+				DEBASE="qt512base_5.12.6-1basyskom1_armhf.deb qt512xmlpatterns_5.12.6-1basyskom1_armhf.deb qt512declarative_5.12.6-1basyskom1_armhf.deb qt512svg_5.12.6-1basyskom1_armhf.deb qt512tools_5.12.6-1basyskom1_armhf.deb"
+				for DEB in $DEBASE; do
+					_download ${PACKAGE} ${DEB}
+					_execute "apt-get -y --allow-unauthenticated -f install /tmp/${DEB}"
+					rm -rf /tmp/${DEB}
+				done
 				source /opt/qt512/bin/qt512-env.sh
 				if [[ ! -f /usr/bin/lrelease-qt5 ]]; then
 					ln -s /usr/lib/x86_64-linux-gnu/qt5/bin/lrelease /usr/bin/lrelease-qt5
@@ -395,20 +522,20 @@ LIST
 		fi
 		cd /tmp
 		_info "Building $APP_TITLE ... "
-		_excute "git clone ${BRANCH_QBIT} qBittorrent"
+		_execute "git clone ${BRANCH_QBIT} qBittorrent"
 		cd qBittorrent || { _error "Can not download qBittorrent" && exit 1; }
-		_excute "git checkout release-${qbitversion}"
-		_excute "./configure --disable-gui --disable-debug --prefix=/tmp/dist/qbittorrent"
-		_excute "make -j$(nproc)"
+		_execute "git checkout release-${qbitversion}"
+		_execute "./configure --disable-gui --disable-debug --prefix=/tmp/dist/qbittorrent"
+		_execute "make -j$(nproc)"
 		mkdir -p /tmp/dist/qbittorrent
 		mkdir -p /root/pool/
-		_excute "make install"
+		_execute "make install"
 		fpm -f -C /tmp/dist/qbittorrent -p /root/pool/qbittorrent_${qbitversion}.deb -s dir -t deb -n qbittorrent-nox --version ${qbitversion} --description "qBittorrent compiled by QuickBox ARM" >/dev/null 2>&1
-		_excute "dpkg -i /root/pool/qbittorrent_${qbitversion}.deb"
+		_execute "dpkg -i /root/pool/qbittorrent_${qbitversion}.deb"
 		cd /tmp
 		rm -rf {qBittorrent,libtorrent,dist}
 		# disable auto upgrade
-		_excute "apt-mark hold qbittorrent-nox"
+		_execute "apt-mark hold qbittorrent-nox"
 	fi
 	_success "${APP_TITLE} Built."
 }
@@ -444,11 +571,11 @@ function _configureApp() {
 			## See https://github.com/KozakaiAya/libqbpasswd
 			cd /tmp
 			_info "Building libqbpasswd ... "
-			_excute "apt-get install -yqq build-essential"
-			_excute "git clone ${BRANCH_LIBQBPASS} libqbpasswd"
+			_execute "apt-get install -yqq build-essential"
+			_execute "git clone ${BRANCH_LIBQBPASS} libqbpasswd"
 			cd libqbpasswd
-			_excute "make"
-			_excute "cp -f qb_password_gen /usr/local/bin/quickbox/system/auxiliary/qb_password_gen"
+			_execute "make"
+			_execute "cp -f qb_password_gen /usr/local/bin/quickbox/system/auxiliary/qb_password_gen"
 			cd /tmp
 			rm -rf /tmp/libqbpasswd
 			pbkdf2pass=$(/usr/local/bin/quickbox/system/auxiliary/qb_password_gen ${password})
@@ -457,16 +584,31 @@ function _configureApp() {
 enabled=false
 program=
 
+[Application]
+FileLogger\Enabled=true
+FileLogger\Age=6
+FileLogger\DeleteOld=true
+FileLogger\Backup=true
+FileLogger\AgeType=1
+FileLogger\MaxSize=20
+
 [LegalNotice]
 Accepted=true
 
 [Preferences]
 Bittorrent\AddTrackers=false
+Bittorrent\LSD=false
 Bittorrent\MaxRatioAction=0
 Bittorrent\PeX=true
-Bittorrent\Encryption=0
-Connection\GlobalDLLimitAlt=10
-Connection\GlobalUPLimitAlt=10
+Bittorrent\Encryption=1
+Bittorrent\MaxConnecs=-1
+Bittorrent\MaxConnecsPerTorrent=-1
+Bittorrent\MaxRatioAction=0
+Bittorrent\uTP=false
+Bittorrent\uTP_rate_limited=false
+Connection\GlobalDLLimitAlt=0
+Connection\GlobalUPLimitAlt=0
+Connection\UPnP=false
 Downloads\DiskWriteCacheSize=64
 Downloads\DiskWriteCacheTTL=60
 Downloads\PreAllocation=true
@@ -483,7 +625,7 @@ WebUI\LocalHostAuth=false
 WebUI\Password_PBKDF2="@ByteArray(${pbkdf2pass})"
 WebUI\Port=${PORT}
 WebUI\ServerDomains=*
-WebUI\UseUPnP=true
+WebUI\UseUPnP=false
 WebUI\Username=${username}
 
 [BitTorrent]
@@ -491,7 +633,7 @@ Session\GuidedReadCache=true
 Session\ChokingAlgorithm=FixedSlots
 Session\SeedChokingAlgorithm=FastestUpload
 Session\MultiConnectionsPerIp=true
-Session\BTProtocol=Both
+Session\BTProtocol=TCP
 Session\CreateTorrentSubfolder=true
 Session\DisableAutoTMMByDefault=true
 Session\DisableAutoTMMTriggers\CategoryChanged=true
@@ -580,6 +722,9 @@ EOF
 		if [[ -f /install/.${username}.flexget.lock ]]; then
 			sed -i "s/QBPORT/${PORT}/g" /home/${username}/.config/flexget/config.yml
 		fi
+		if [[ -f /install/.${username}.autoremovetorrents.lock ]]; then
+			sed -i "s/QBPORT/${PORT}/g" /home/${username}/.config/autoremovetorrents/config.yml
+		fi
 	done
 
 	cat >/etc/nginx/apps/qbittorrent.conf <<'QBRP'
@@ -619,8 +764,8 @@ TimeoutSec=300
 [Install]
 WantedBy=multi-user.target
 QBS
-	_excute "systemctl daemon-reload"
-	_excute "nginx -s reload"
+	_execute "systemctl daemon-reload"
+	_execute "nginx -s reload"
 	_success "${APP_TITLE} configured."
 }
 
@@ -634,8 +779,8 @@ function _installAppStart() {
 	_info "Starting ${APP_TITLE}..."
 	userlist=$(cat $(find /root/.qbuser/ -type f) | cut -d: -f1)
 	for username in $userlist; do
-		_excute "systemctl enable ${APP_SERVICE}@${username}"
-		_excute "systemctl start ${APP_SERVICE}@${username}"
+		_execute "systemctl enable ${APP_SERVICE}@${username}"
+		_execute "systemctl start ${APP_SERVICE}@${username}"
 		sleep 5
 		if (_version_gt ${qbitversion} 4.1.9.1); then
 			curl -i --data 'json={"scan_dirs":{"'"/home/${username}/qbwatch"'":1}}' http://localhost:$(cat /install/${username}.$APP_NAME.port)/api/v2/app/setPreferences >>"${OUTTO}" 2>&1
@@ -647,10 +792,13 @@ function _installAppStart() {
 }
 
 function _flexget() {
-	username=$(cat /root/.admin.info | cut -d: -f1)
-	if [[ -f "/install/.${username}.flexget.lock" ]]; then
-		if (su ${username} -c 'pip2 freeze --disable-pip-version-check | grep -q "FlexGet"'); then
-			bash /usr/local/bin/quickbox/package/update/updatepackage-flexget -l $OUTTO
+	if [[ ! -f /install/.pyenv.lock ]]; then
+		username=$(cat /root/.admin.info | cut -d: -f1)
+		if [[ -f "/install/.${username}.flexget.lock" ]]; then
+			fgversion=$(su ${username} -c '~/.local/bin/flexget -V | head -1 | cut -d. -f1')
+			if [[ ${fgversion} == '2' ]]; then
+				bash /usr/local/bin/quickbox/package/update/updatepackage-flexget -l $OUTTO
+			fi
 		fi
 	fi
 }
@@ -658,14 +806,14 @@ function _flexget() {
 #################################################################################
 # OPT GENERATOR
 #################################################################################
-ARGS=$(getopt -a -o ghl: -l gui,help,log:,qb:,lt: -- "$@")
+if ! ARGS=$(getopt -a -o hl: -l help,with-cf,with-sf,with-osdn,with-github,log:,qb:,lt: -- "$@")
+then
+    _usage
+    exit 1
+fi
 eval set -- "${ARGS}"
 while true; do
 	case "$1" in
-	-g | --gui)
-		_menuinstall
-		break
-		;;
 	-h | --help)
 		_usage
 		exit 1
@@ -681,6 +829,18 @@ while true; do
 	--lt)
 		libtversion="$2"
 		shift
+		;;
+	--with-cf)
+		cdn="cf"
+		;;
+	--with-sf)
+		cdn="sf"
+		;;
+	--with-osdn)
+		cdn="osdn"
+		;;
+	--with-github)
+		cdn="github"
 		;;
 	--)
 		shift

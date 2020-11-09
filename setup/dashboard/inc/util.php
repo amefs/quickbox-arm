@@ -374,6 +374,12 @@ function getPluginConf($plugin)
 
 function getLogin()
 {
+	if ($_SERVER['REMOTE_ADDR'] === '127.0.0.1')
+	{
+		$master = file_get_contents($_SERVER['DOCUMENT_ROOT'].'/db/master.txt');
+		$master = preg_replace('/\s+/', '', $master);
+		return $master;
+	}
 	return( (isset($_SERVER['REMOTE_USER']) && !empty($_SERVER['REMOTE_USER'])) ? strtolower($_SERVER['REMOTE_USER']) : '' );
 }
 
@@ -724,6 +730,18 @@ function formatsize($length, $decimals = 3, $startwith = 1)
 		return '0 B';
 	}
 	$si_prefix = array( 'B', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB' );
+	$base = 1024;
+	$index = floor(log($length, $base));
+	return number_format($length / pow($base, $index), $decimals) . ' ' . $si_prefix[$index + 1];
+}
+
+function formatspeed($length, $decimals = 3, $startwith = 1)
+{
+	if ($length < 1e-5)
+	{
+		return '0 B';
+	}
+	$si_prefix = array( 'bps', 'Kbps', 'Mbps', 'Gbps', 'Tbps', 'Pbps', 'Ebps', 'Zbps', 'Ybps' );
 	$base = 1024;
 	$index = floor(log($length, $base));
 	return number_format($length / pow($base, $index), $decimals) . ' ' . $si_prefix[$index + 1];

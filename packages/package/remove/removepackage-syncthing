@@ -42,7 +42,7 @@ _green=$(tput setaf 2)
 _tan=$(tput setaf 3)
 _cyan=$(tput setaf 6)
 
-function _excute() {
+function _execute() {
 	($1 >>"${OUTTO}" 2>&1)
 }
 function _print() {
@@ -122,10 +122,12 @@ Please wait until the process is completed
 
 function _removeService() {
 	_info "Removing ${APP_TITLE} service..."
-	_excute "systemctl disable $APP_SERVICE"
-	_excute "systemctl stop $APP_SERVICE"
+	for username in $userlist; do
+		_execute "systemctl disable ${APP_SERVICE}@${username}"
+		_execute "systemctl stop ${APP_SERVICE}@${username}"
+	done
 	rm -rf /etc/systemd/${APP_SERVICE}@.service
-	_excute "systemctl daemon-reload"
+	_execute "systemctl daemon-reload"
 	_success "${APP_TITLE} service removed."
 }
 
@@ -134,9 +136,9 @@ function _removeDepends() {
 	local DEPLIST="${APP_BASEDEPS}"
 	for depend in $DEPLIST; do
 		_info "Removing ${depend}... "
-		_excute "apt-get -y purge ${depend}"
-		_excute "apt-get -y autoremove"
-		_excute "apt-get -y autoclean"
+		_execute "apt-get -y purge ${depend}"
+		_execute "apt-get -y autoremove"
+		_execute "apt-get -y autoclean"
 	done
 	_success "${APP_TITLE} dependencies removed."
 }
@@ -166,7 +168,11 @@ function _removeAppLock() {
 #################################################################################
 # OPT GENERATOR
 #################################################################################
-ARGS=$(getopt -a -o hl: -l help,log: -- "$@")
+if ! ARGS=$(getopt -a -o hl: -l help,log: -- "$@")
+then
+    _usage
+    exit 1
+fi
 eval set -- "${ARGS}"
 while true; do
 	case "$1" in

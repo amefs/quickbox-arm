@@ -42,7 +42,7 @@ _green=$(tput setaf 2)
 _tan=$(tput setaf 3)
 _cyan=$(tput setaf 6)
 
-function _excute() {
+function _execute() {
 	($1 >>"${OUTTO}" 2>&1)
 }
 function _print() {
@@ -125,7 +125,7 @@ function _removeApp() {
 	rm -rf /srv/rutorrent
 	rm -rf ${plugin_lib}
 	rm -rf /etc/nginx/apps/rutorrent.conf
-	_excute "nginx -s reload"
+	_execute "nginx -s reload"
 	_success "${APP_TITLE} removed."
 }
 
@@ -138,7 +138,11 @@ function _removeAppLock() {
 #################################################################################
 # OPT GENERATOR
 #################################################################################
-ARGS=$(getopt -a -o hl: -l help,log: -- "$@")
+if ! ARGS=$(getopt -a -o hl: -l help,log: -- "$@")
+then
+    _usage
+    exit 1
+fi
 eval set -- "${ARGS}"
 while true; do
 	case "$1" in

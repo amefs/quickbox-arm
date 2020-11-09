@@ -32,7 +32,7 @@ else
 	username=$(cat /root/.admin.info | cut -d: -f1)
 fi
 
-function _excute() {
+function _execute() {
 	($1 >>"${OUTTO}" 2>&1)
 }
 function _print() {
