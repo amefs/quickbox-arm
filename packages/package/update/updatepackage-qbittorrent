@@ -365,7 +365,7 @@ function _updateApp() {
 				fi
 			fi
 			PACKAGE="qbittorrent"
-			QBITBIN=qbittorrent-nox_${qbitversion}-libt1.1-1build1_armhf.deb
+			QBITBIN=qbittorrent-nox_${qbitversion}-libt${libt_installed_major_version}-1build1_armhf.deb
 			DEB=${QBITBIN}
 			_download ${PACKAGE} ${DEB}
 			_execute "apt-get -y --allow-unauthenticated --allow-downgrades -f install /tmp/${QBITBIN}"
