@@ -246,6 +246,7 @@ if(file_exists('/srv/dashboard/custom/url.override.php')){
   $qbittorrentdlURL = "https://" . $_SERVER['HTTP_HOST'] . "/$username.qbittorrent.downloads";
   $rtorrentdlURL = "https://" . $_SERVER['HTTP_HOST'] . "/$username.rtorrent.downloads";
   $rutorrentURL = "https://" . $_SERVER['HTTP_HOST'] . "/rutorrent/";
+  $speedtestURL = "https://" . $_SERVER['HTTP_HOST'] . "/speedtest/";
   $syncthingURL = "https://" . $_SERVER['HTTP_HOST'] . "/$username.syncthing/";
   $transmissionURL = "https://" . $_SERVER['HTTP_HOST'] . "/transmission";
   $transmissiondlURL = "https://" . $_SERVER['HTTP_HOST'] . "/$username.transmission.downloads";

@@ -160,6 +160,7 @@ $hour; $day; $month; $top; $summary;
             }
             
             $diff_time=strtotime("now")-strtotime(strftime("1 %B %Y",strtotime("now")));
+
             $month[$i]['rx_avg']    = round($month[$i]['rx'] / $diff_time) * 8;
             $month[$i]['tx_avg']    = round($month[$i]['tx'] / $diff_time) * 8;
         }

@@ -236,7 +236,6 @@ function _logcheck() {
 }
 
 function _askhostname() {
-	hostname=""
 	hostname=$(whiptail --title "$INFO_TITLE_HOSTNAME" --inputbox "$INFO_TEXT_HOSTNAME" 10 72 --ok-button "$BUTTON_OK" --cancel-button "$BUTTON_CANCLE" 3>&1 1>&2 2>&3)
 }
 
@@ -779,7 +778,11 @@ function _webconsole() {
 	PUBLICIP=$(ip addr show | grep 'inet ' | grep -v 127.0.0.1 | awk '{print $2}' | cut -d/ -f1 | head -n 1)
 	cat >/etc/profile <<EOF
 echo " Welcome Back !"
-echo "    * Dashboard:  https://${PUBLICIP}"
+if [[ -f /install/domain.info ]]; then
+	echo "    * Dashboard:  https://\$(cat /install/domain.info)"
+else
+	echo "    * Dashboard:  https://${PUBLICIP}"
+fi
 echo ""
 EOF
 	# install shellinabox and service config
@@ -852,6 +855,11 @@ function _insdashboard() {
 		touch /install/.lang_en.lock
 		;;
 	esac
+	if [[ $(vnstat -v | grep -Eo "[0-9.]+" | cut -d . -f1) == "1" ]]; then
+		\cp -f /srv/dashboard/widgets/vnstat-raw.php /srv/dashboard/widgets/vnstat.php
+	elif [[ $(vnstat -v | grep -Eo "[0-9.]+" | cut -d . -f1) == "2" ]]; then
+		\cp -f /srv/dashboard/widgets/vnstat-json.php /srv/dashboard/widgets/vnstat.php
+	fi
 	touch /install/.dashboard.lock
 	cd /srv/dashboard/ws || exit 1
 	npm install --production >>"${OUTTO}" 2>&1
@@ -1077,8 +1085,18 @@ function _startinstall() {
 		fi
 		sleep 1
 
+		# setup domain
+		echo -e "XXX\n95\n$INFO_TEXT_PROGRESS_12\nXXX"
+		if [[ $domain != "" ]]; then
+			bash ${local_setup_script}lecert.sh "${OUTTO}" "$domain" >/dev/null 2>&1
+			echo -e "XXX\n97\n$INFO_TEXT_PROGRESS_12$INFO_TEXT_DONE\nXXX"
+		else
+			echo -e "XXX\n97\n$INFO_TEXT_PROGRESS_12$INFO_TEXT_SKIP\nXXX"
+		fi
+		sleep 1
+
 		# Finish
-		echo -e "XXX\n90\n$INFO_TEXT_PROGRESS_12\nXXX"
+		echo -e "XXX\n97\n$INFO_TEXT_PROGRESS_13\nXXX"
 		systemctl stop apache2 >/dev/null 2>&1
 		systemctl disable apache2 >/dev/null 2>&1
 		APACHE_PKGS='apache2 apache2-bin apache2-data'
@@ -1088,7 +1106,7 @@ function _startinstall() {
 		done
 		apt-get -y autoclean >/dev/null 2>&1
 		rm -rf /install/.system.lock
-		echo -e "XXX\n100\n$INFO_TEXT_PROGRESS_13\nXXX"
+		echo -e "XXX\n100\n$INFO_TEXT_PROGRESS_14\nXXX"
 		sleep 0.5
 	} | whiptail --title "$INFO_TITLE_PROGRESS" --gauge "$INFO_TEXT_PROGRESS_0" 8 64 0
 	# record end time
@@ -1097,7 +1115,11 @@ function _startinstall() {
 	timeusedmin=$((timeused / 60))
 	echo -e "\n#################################################################################" >>"${OUTTO}" 2>&1
 	echo "Install finished in $timeusedmin Min" >>"${OUTTO}" 2>&1
-	if [[ $autoreboot == 1 ]]; then reboot; fi
+	if [[ $autoreboot == 1 ]]; then 
+		reboot; 
+	elif [[ $autoreboot == 3 ]]; then 
+		exit 0
+	fi
 	if (whiptail --title "$INFO_TITLE_FIN" --yesno "$INFO_TEXT_FIN_1$timeusedmin$INFO_TEXT_FIN_MIN\n$INFO_TEXT_FIN_2" --yes-button "$BUTTON_YES" --no-button "$BUTTON_NO" 8 72); then
 		reboot
 	else
@@ -1111,13 +1133,14 @@ function _summary() {
 	sshport=$(grep -e '#*Port 22' < /etc/ssh/sshd_config | grep -Eo "[0-9]+" )
 	if (whiptail --title "$INFO_TITLE_SUMMARY" --yesno "${INFO_TEXT_SUMMARY_1}\n\n\
 ${INFO_TEXT_SUMMARY_2} $(echo "$OUTTO" | cut -d " " -f 1)\n\
-$(if [[ $hostname != "" ]]; then echo -e "${INFO_TEXT_SUMMARY_3}$hostname\n"; fi)\
+$(if [[ $domain != "" ]]; then printf "${INFO_TEXT_SUMMARY_20} $domain"; fi)\n\
+$(if [[ $hostname != "" ]]; then printf "${INFO_TEXT_SUMMARY_3} $hostname"; fi)\n\
 ${INFO_TEXT_SUMMARY_4} $ip:$sshport\n\
 ${INFO_TEXT_SUMMARY_5} $username\n\
 ${INFO_TEXT_SUMMARY_6} $password\n\
-$(if [[ $ftp == 1 ]]; then echo -e "${INFO_TEXT_SUMMARY_11} $ftp_ip:5757\n"; fi)\
-\n${INFO_TEXT_SUMMARY_12} $dash_theme ${INFO_TEXT_SUMMARY_13}\
-$(if [[ $chsource == 1 ]]; then echo -e "\n${INFO_TEXT_SUMMARY_14}"; fi)\
+$(if [[ $ftp == 1 ]]; then printf "${INFO_TEXT_SUMMARY_11} $ftp_ip:5757"; fi)\n\
+${INFO_TEXT_SUMMARY_12} $dash_theme ${INFO_TEXT_SUMMARY_13}\
+$(if [[ $chsource == 1 ]]; then printf "\n${INFO_TEXT_SUMMARY_14}"; fi)\
 $(case "$cdn" in
 	"--with-cf") echo -e "\nCloudflare ${INFO_TEXT_SUMMARY_19}";;
 	"--with-sf") echo -e "\nSourceforge ${INFO_TEXT_SUMMARY_19}";;
@@ -1142,6 +1165,7 @@ $(if [[ $autoreboot == 1 ]]; then echo -e "\n${INFO_TEXT_SUMMARY_17}\n"; fi)\
 		local menu_choice
 		menu_choice=$(
 			whiptail --title "$INFO_TITLE_EDIT" --menu "$INFO_TEXT_EDIT" 18 72 12 \
+				"domain" "$CHOICE_TEXT_EDIT_14" \
 			"hostname" "$CHOICE_TEXT_EDIT_1" \
 			"ssh port" "$CHOICE_TEXT_EDIT_2" \
 			"user name" "$CHOICE_TEXT_EDIT_3" \
@@ -1154,6 +1178,7 @@ $(if [[ $autoreboot == 1 ]]; then echo -e "\n${INFO_TEXT_SUMMARY_17}\n"; fi)\
 			"autoreboot" "$CHOICE_TEXT_EDIT_11" 3>&1 1>&2 2>&3
 		)
 		case $menu_choice in
+		"domain") _askdomain ;;
 		"hostname") _askhostname ;;
 		"ssh port") _askchport ;;
 		"user name") _askusrname ;;
@@ -1181,6 +1206,7 @@ function _usage() {
 \nOptions:
   NOTE: * is required anyway
 
+  -d, --domain <domain>            setup domain for server
   -H, --hostname <hostname>        setup hostname, make no change by default
   -P, --port <1-65535>             setup ssh service port, use 4747 by default
   -u, --username <username*>       username is required here
@@ -1199,8 +1225,8 @@ function _usage() {
   --with-APPNAME                   install an application
 
     Available applications:
-    rtorrent,rutorrent,flood,transmission,qbittorrent,
-    deluge,mktorrent,ffmpeg,filebrowser,linuxrar
+    rtorrent | rutorrent | flood | transmission | qbittorrent
+    deluge | mktorrent | ffmpeg | filebrowser | linuxrar
 
   -h, --help                       display this help and exit"
 }
@@ -1215,15 +1241,17 @@ ftp_ip=$(ip addr show | grep 'inet ' | grep -v 127.0.0.1 | awk '{print $2}' | cu
 onekey=0
 chport=4747
 chsource=0
-autoreboot=0
+autoreboot=3
 dash_theme="smoked"
+hostname=""
+domain=""
 app_list=""
 rtgui="rutorrent"
 
 #################################################################################
 # OPT GENERATOR
 #################################################################################
-if ! ARGS=$(getopt -a -o hrH:p:P:s:t:u: -l help,ftp-ip:,lang:,reboot,with-log,no-log,with-ftp,no-ftp,with-cf,with-sf,with-osdn,with-github,with-rtorrent,with-rutorrent,with-flood,with-transmission,with-qbittorrent,with-deluge,with-mktorrent,with-ffmpeg,with-filebrowser,with-linuxrar,hostname:,port:,username:,password:,source:,theme: -- "$@")
+if ! ARGS=$(getopt -a -o d:hrH:p:P:s:t:u: -l domain:,help,ftp-ip:,lang:,reboot,with-log,no-log,with-ftp,no-ftp,with-cf,with-sf,with-osdn,with-github,with-rtorrent,with-rutorrent,with-flood,with-transmission,with-qbittorrent,with-deluge,with-mktorrent,with-ffmpeg,with-filebrowser,with-linuxrar,hostname:,port:,username:,password:,source:,theme: -- "$@")
 then
 	_usage
     exit 1
@@ -1231,6 +1259,11 @@ fi
 eval set -- "${ARGS}"
 while true; do
 	case "$1" in
+	-d | --domain)
+		onekey=1
+		domain="$2"
+		shift
+		;;	
 	-H | --hostname)
 		onekey=1
 		hostname="$2"
@@ -1361,6 +1394,17 @@ if [[ $onekey == 1 ]]; then
 		else
 			source ${local_lang}en.lang
 		fi
+		if [[ $domain != "" ]]; then
+			_get_ip
+			test_domain=$(curl -sH 'accept: application/dns-json' "https://cloudflare-dns.com/dns-query?name=$domain&type=A" | grep -oE "([0-9]{1,3}\.){3}[0-9]{1,3}" | head -1)
+			if [[ $test_domain != $ip ]]; then
+				whiptail --title "$ERROR_TITLE_DOMAINCHK" --msgbox "${ERROR_TEXT_DOMAINCHK_1}$domain${ERROR_TEXT_DOMAINCHK_2}" --ok-button "$BUTTON_OK" 8 72
+				domain=""
+				exit 1
+			else
+				hostname=$domain
+			fi
+		fi
 		DEBIAN_FRONTEND=noninteractive dpkg-reconfigure locales >/dev/null 2>&1
 		if [ $(free -m | grep Mem | awk '{print  $2}') -le 2048 ]; then
 			swap_path=/root/.swapfile
@@ -1401,7 +1445,10 @@ elif [[ $onekey == 0 ]]; then
 
 	# Install guide
 	_logcheck
-	_askhostname
+	_askdomain
+	if [[ $hostname == "" ]]; then
+		_askhostname
+	fi
 	_askchport
 	_askusrname
 	_askpasswd
