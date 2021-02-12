@@ -83,6 +83,7 @@ APP_LOCK=.$APP_NAME.lock
 OUTTO=/srv/dashboard/db/output.log
 qbitversion=4.2.5
 cdn=$(cat /install/.cdn.lock)
+use_static=false
 
 BRANCH_QBIT="https://github.com/qbittorrent/qBittorrent.git"
 BRANCH_LIBQBPASS="https://github.com/KozakaiAya/libqbpasswd.git"
@@ -262,7 +263,7 @@ function _download() {
 }
 
 function _updateLibt() {
-	_warning "Use Libtorrent ${libtversion} against qBittorrent 4.3.x"
+	_warning "Use Libtorrent ${libtversion} against qBittorrent ${qbit_major_version}.x"
 	_info "Upgrading libtorrent-rasterbar..."
 	PACKAGE="libtorrent-rasterbar"
 	cd /tmp || exit 1
@@ -377,13 +378,7 @@ function _updateStatic() {
 		wget -t3 -T20 -q -O /usr/local/bin/qbittorrent-nox https://qbit-static.ezapi.net/${static_binary}
 		chmod +x /usr/local/bin/qbittorrent-nox
 	else
-		if [[ ! -f /install/.docker.lock ]]; then
-			_info "Install docker for building qBittorrent... "
-			rm -f /install/.install.lock
-			bash /usr/local/bin/quickbox/package/install/installpackage-docker -l $OUTTO
-			echo "qBittorrent" >/install/.install.lock
-		fi
-			case ${libtversion} in
+		case ${libtversion} in
 			1.2.0) libttag="libtorrent_1_2_0" ;;
 			1.2.1) libttag="libtorrent_1_2_1" ;;
 			1.2.2) libttag="libtorrent_1_2_2" ;;
@@ -413,12 +408,14 @@ function _updateStatic() {
 			1.1.13) libttag="libtorrent-1_1_13" ;;
 			1.1.14) libttag="libtorrent-1_1_14" ;;
 			*) libttag="libtorrent-1_1_14" ;;
-			esac
+		esac
 		_info "building static qBittorrent... "
 		cd /tmp || exit 1
 		mkdir -p /tmp/qb-static
-		docker run -it -v /tmp/qb-static:/root alpine:latest /bin/ash -c "apk update && apk add bash curl && cd && curl -sL git.io/qbstatic | bash -s all -i -lt \"${libttag}\" -qt \"release-${qbitversion}\"" >> $OUTTO 2>&1
-		cp /tmp/qb-static/qb-build/bin/qbittorrent-nox /usr/local/bin/qbittorrent-nox
+		\cp -rf /etc/QuickBox/packages/system/auxiliary/qbittorrent-nox-static.sh /tmp/qb-static/qbittorrent-nox-static.sh
+		cd /tmp/qb-static || exit 1
+		bash /tmp/qb-static/qbittorrent-nox-static.sh all -i --lt "${libttag}" --qt "release-${qbitversion}" -v >> $OUTTO 2>&1
+		cp /tmp/qb-static/qb-build/completed/qbittorrent-nox /usr/local/bin/qbittorrent-nox
 		chmod +x /usr/local/bin/qbittorrent-nox
 		_info "cleaning up... "
 		rm -rf /tmp/qb-static
@@ -462,7 +459,7 @@ function _updateApp() {
 				libtversion="1.1.14"
 				libt_major_version="1.1"
 			fi
-			_warning "Use Libtorrent ${libtversion} against qBittorrent 4.3.x"
+			_warning "Use Libtorrent ${libtversion} against qBittorrent ${qbit_major_version}.x"
 			_info "Fetching package list..."
 			cd /tmp || exit 1
 			wget -t3 -T20 -q -O file.lst https://qbit-static.ezapi.net/file.lst
