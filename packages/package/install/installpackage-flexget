@@ -126,9 +126,9 @@ function _setLock() {
 }
 function _lockCleanup() {
 	if [[ -f /install/.lang_zh.lock ]]; then
-		_info "定时任务用法参见: https://github.com/amefs/quickbox-lite/wiki/%E5%B8%B8%E8%A7%81%E9%97%AE%E9%A2%98#%E4%B8%BA%E4%BB%80%E4%B9%88%E6%89%BE%E4%B8%8D%E5%88%B0-flexget-%E5%8F%AF%E6%89%A7%E8%A1%8C%E6%96%87%E4%BB%B6"
+		_info "定时任务用法参见: https://cn.wiki.ptbox.dev/flexget/"
 	else
-		_info "See cronjob example here: https://github.com/amefs/quickbox-lite/wiki/FAQ#where-is-the-flexget-execute-file"
+		_info "See cronjob example here: https://en.wiki.ptbox.dev/flexget/"
 	fi
 	echo "$APP_TITLE Install Complete!
 
@@ -233,8 +233,8 @@ function _installApp() {
 	_info "Building ${APP_TITLE}..."
 
 	# Install for single user
-	_installPy 3.7.7
-	_initPyVenv 3.7.7 /home/${username}/.local/flexget3 ${username}
+	_installPy 3.8.12
+	_initPyVenv 3.8.12 /home/${username}/.local/flexget3 ${username}
 	chown -R ${username}.${username} /home/${username}/.local
 	cd /home/${username}/.local/flexget3
 	_info "Installing requirements... "
@@ -252,7 +252,7 @@ function _installApp() {
 		sudo -u ${username} -H bash -c "/home/${username}/.local/flexget3/bin/pip install --upgrade flexget" >>"${OUTTO}" 2>&1
 	fi
 	if [[ -f /install/.transmission.lock ]]; then
-		sudo -u ${username} -H bash -c "/home/${username}/.local/flexget3/bin/pip install transmissionrpc" >>"${OUTTO}" 2>&1
+		sudo -u ${username} -H bash -c "/home/${username}/.local/flexget3/bin/pip install transmission-rpc" >>"${OUTTO}" 2>&1
 	fi
 	if [[ -f /install/.deluge.lock ]]; then
 		sudo -u ${username} -H bash -c "/home/${username}/.local/flexget3/bin/pip install deluge-client" >>"${OUTTO}" 2>&1
@@ -267,7 +267,8 @@ function _configureApp() {
 	pylib=/home/${username}/.local/flexget3/lib
 	passphrase=$(cat /root/.ssh/local_user)
 	passtext=$(cat /root/.qbuser/${username}.info | cut -d: -f2)
-	if [[ $CODENAME == xenial ]]; then
+	# shellcheck disable=SC2091
+	if ! $(openssl version | awk '$2 ~ /(^0\.)|(^1\.(0\.|1\.0))/ { exit 1 }'); then
 		password=$(echo ${passtext} | openssl enc -aes-128-ecb -a -d -pass pass:${passphrase} -nosalt)
 	else
 		password=$(echo ${passtext} | openssl enc -aes-128-ecb -pbkdf2 -a -d -pass pass:${passphrase} -nosalt)
@@ -310,15 +311,15 @@ diff -Nur '--exclude=.git' '--exclude=.vs' flexget/webserver.py flexget-patched/
      session.commit()
 EOF
 	sed -i "s/username='replace'/username='${username}'/g" /tmp/flexget-user-passwd.patch
-	patch -p1 -d ${pylib}/python3.7/site-packages/flexget/ </tmp/flexget-user-passwd.patch >>"${OUTTO}" 2>&1
-	sudo -u ${username} -H bash -c "${pybin}/python -m compileall ${pylib}/python3.7/site-packages/flexget/webserver.py" >>"${OUTTO}" 2>&1
+	patch -p1 -d ${pylib}/python3.8/site-packages/flexget/ </tmp/flexget-user-passwd.patch >>"${OUTTO}" 2>&1
+	sudo -u ${username} -H bash -c "${pybin}/python -m compileall ${pylib}/python3.8/site-packages/flexget/webserver.py" >>"${OUTTO}" 2>&1
 	rm -rf /tmp/flexget-user-passwd.patch
 
 	# remove hard encode username
 	if [[ ${old} == 1 ]]; then
-		sed -i "s/\\\'flexget\\\'/\\\'\\\'/g" ${pylib}/python3.7/site-packages/flexget/ui/v1/app/scripts/app.js
+		sed -i "s/\\\'flexget\\\'/\\\'\\\'/g" ${pylib}/python3.8/site-packages/flexget/ui/v1/app/scripts/app.js
 	else
-		jspath=$(grep -rnw "${pylib}/python3.7/site-packages/flexget/ui/v2/dist/assets/" -e '"flexget"' | cut -d: -f1)
+		jspath=$(grep -rnw "${pylib}/python3.8/site-packages/flexget/ui/v2/dist/assets/" -e '"flexget"' | cut -d: -f1)
 		sed -i "s/initialValues:{username:\"flexget\"/initialValues:{username:\"\"/g" ${jspath}
 	fi
 

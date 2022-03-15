@@ -94,7 +94,7 @@ FORCE=0
 ################################################################################
 function _usage() {
 	echo -e "\nQuickBox ARM $APP_TITLE Updater"
-	echo -e "\nUsage: \n$(basename "$0") [-h] [-l logfile] [--qb]"
+	echo -e "\nUsage: \n$(basename "$0") [-h] [-l logfile] [-s static] [--qb]"
 	echo -e "\nOptions:\n"
 	echo "-l, --log <logfile>       specific log file"
 	echo "--qb <version>            the qbittorrent version you want to install"
@@ -363,7 +363,7 @@ LIST
 		mkdir -p /tmp/dist/qbittorrent
 		mkdir -p /root/pool/
 		_execute "make install"
-		fpm -f -C /tmp/dist/qbittorrent -p /root/pool/qbittorrent_${qbitversion}.deb -s dir -t deb -n qbittorrent-nox --version ${qbitversion} --description "qBittorrent compiled by QuickBox Lite" >/dev/null 2>&1
+		fpm -f -C /tmp/dist/qbittorrent -p /root/pool/qbittorrent_${qbitversion}.deb -s dir -t deb -n qbittorrent-nox --version ${qbitversion} --description "qBittorrent compiled by QuickBox ARM" >/dev/null 2>&1
 		_execute "dpkg -i /root/pool/qbittorrent_${qbitversion}.deb"
 		cd /tmp || exit 1
 		rm -rf {qBittorrent,libtorrent,dist}
@@ -459,7 +459,7 @@ function _updateApp() {
 				libtversion="1.1.14"
 				libt_major_version="1.1"
 			fi
-			_warning "Use Libtorrent ${libtversion} against qBittorrent ${qbit_major_version}.x"
+			_warning "Use Libtorrent ${libtversion} for qBittorrent ${qbit_major_version}.x"
 			_info "Fetching package list..."
 			cd /tmp || exit 1
 			wget -t3 -T20 -q -O file.lst https://qbit-static.ezapi.net/file.lst
@@ -563,7 +563,8 @@ function _reconfigureAppv1() {
 	for username in $userlist; do
 		passphrase=$(cat /root/.ssh/local_user)
 		passtext=$(cat /root/.qbuser/${username}.info | cut -d: -f2)
-		if [[ $CODENAME == xenial ]]; then
+		# shellcheck disable=SC2091
+		if ! $(openssl version | awk '$2 ~ /(^0\.)|(^1\.(0\.|1\.0))/ { exit 1 }'); then
 			password=$(echo ${passtext} | openssl enc -aes-128-ecb -a -d -pass pass:"${passphrase}" -nosalt)
 		else
 			password=$(echo ${passtext} | openssl enc -aes-128-ecb -pbkdf2 -a -d -pass pass:"${passphrase}" -nosalt)
@@ -594,7 +595,8 @@ function _reconfigureAppv2() {
 	for username in $userlist; do
 		passphrase=$(cat /root/.ssh/local_user)
 		passtext=$(cat /root/.qbuser/${username}.info | cut -d: -f2)
-		if [[ $CODENAME == xenial ]]; then
+		# shellcheck disable=SC2091
+		if ! $(openssl version | awk '$2 ~ /(^0\.)|(^1\.(0\.|1\.0))/ { exit 1 }'); then
 			password=$(echo ${passtext} | openssl enc -aes-128-ecb -a -d -pass pass:"${passphrase}" -nosalt)
 		else
 			password=$(echo ${passtext} | openssl enc -aes-128-ecb -pbkdf2 -a -d -pass pass:"${passphrase}" -nosalt)

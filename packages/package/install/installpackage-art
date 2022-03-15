@@ -119,9 +119,9 @@ function _setLock() {
 }
 function _lockCleanup() {
 	if [[ -f /install/.lang_zh.lock ]]; then
-		_info "定时任务用法参见: https://github.com/amefs/quickbox-lite/wiki/%E5%B8%B8%E8%A7%81%E9%97%AE%E9%A2%98#%E5%A6%82%E4%BD%95%E4%BD%BF%E7%94%A8-autoremove-torrents"
+		_info "定时任务用法参见: https://cn.wiki.ptbox.dev/autoremovetorrents/"
 	else
-		_info "See cronjob example here: https://github.com/amefs/quickbox-lite/wiki/FAQ#how-to-use-autoremove-torrents"
+		_info "See cronjob example here: https://en.wiki.ptbox.dev/autoremovetorrents/"
 	fi
 	echo "$APP_TITLE Install Complete!
 
@@ -226,8 +226,8 @@ function _installApp() {
 	_info "Building ${APP_TITLE}..."
 
 	# Install for single user
-	_installPy 3.7.7
-	_initPyVenv 3.7.7 /home/${username}/.local/autoremovetorrents ${username}
+	_installPy 3.8.12
+	_initPyVenv 3.8.12 /home/${username}/.local/autoremovetorrents ${username}
 	chown -R ${username}.${username} /home/${username}/.local
 	cd /home/${username}/.local/autoremovetorrents
 	_info "Installing requirements... "
@@ -249,7 +249,8 @@ function _configureApp() {
 	pylib=/home/${username}/.local/autoremovetorrents/lib
 	passphrase=$(cat /root/.ssh/local_user)
 	passtext=$(cat /root/.qbuser/${username}.info | cut -d: -f2)
-	if [[ $CODENAME == xenial ]]; then
+	# shellcheck disable=SC2091
+	if ! $(openssl version | awk '$2 ~ /(^0\.)|(^1\.(0\.|1\.0))/ { exit 1 }'); then
 		password=$(echo ${passtext} | openssl enc -aes-128-ecb -a -d -pass pass:${passphrase} -nosalt)
 	else
 		password=$(echo ${passtext} | openssl enc -aes-128-ecb -pbkdf2 -a -d -pass pass:${passphrase} -nosalt)

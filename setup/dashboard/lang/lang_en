@@ -344,7 +344,6 @@ $L['UNINSTALLING_TITLE'] = 'Uninstalling';
 $L['UNINSTALLING_TXT_1'] = 'Please wait while';
 $L['UNINSTALLING_TXT_2'] = 'is being uninstalled from your system.';
 
-
 ////////////////////////////////////////////////////////////////////////////
 // SAMPLE
 // $L['SAMPLE'] = 'Sample';

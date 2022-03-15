@@ -187,7 +187,7 @@ function _installApp() {
 # pyenv
 export PYENV_ROOT="/opt/pyenv"
 export PATH="/opt/pyenv/bin:\$PATH"
-eval "\$(pyenv init -)"
+eval "\$(pyenv init --path)"
 eval "\$(pyenv virtualenv-init -)"
 EOF
     source /root/.bash_pyenv

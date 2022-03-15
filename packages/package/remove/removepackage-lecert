@@ -140,7 +140,8 @@ function _removeDepends() {
 
 function _removeApp() {
 	_info "Removing ${APP_TITLE}..."
-	crontab -u root -l | grep -v 'acme.sh' | crontab -u root -
+	cd /root/.acme.sh || exit 1
+	_execute "./acme.sh --uninstall-cronjob"
 	sed -i "/acme/d" /root/.bashrc
 	rm -rf /root/acme.sh
 	rm -rf /root/.acme.sh
@@ -196,12 +197,14 @@ server {
 }
 NGC
 
-	IPV6=$(wget -t1 -T5 -qO- v6.ipv6-test.com/api/myip.php | grep -Eo "[0-9a-z:]+" | head -1)
-	# disable ipv6 if not exist
-	if [[ -z ${IPV6} ]]; then
-		sed -i 's/listen \[::\]:80 default_server;/#listen \[::\]:80 default_server;/g' /etc/nginx/sites-enabled/default
-		sed -i 's/listen \[::\]:443 ssl http2 default_server;/#listen \[::\]:443 ssl http2 default_server;/g' /etc/nginx/sites-enabled/default
-	fi
+	# vsftpd
+	ftp_ip=$(cat /etc/vsftpd.conf | grep pasv_address | grep -Eo "[0-9.]+")
+	\cp -rf /etc/QuickBox/setup/templates/vsftpd/vsftpd.conf.template /etc/vsftpd.conf
+	sed -i 's/^\(pasv_min_port=\).*/\110090/' /etc/vsftpd.conf
+	sed -i 's/^\(pasv_max_port=\).*/\110100/' /etc/vsftpd.conf
+	echo "pasv_address=$ftp_ip" >>/etc/vsftpd.conf
+
+	_execute "systemctl restart vsftpd"
 	_execute "nginx -s reload"
 	_success "${APP_TITLE} removed."
 }
@@ -209,6 +212,7 @@ NGC
 function _removeAppLock() {
 	_info "Removing ${APP_TITLE} lock..."
 	rm -f /install/${APP_LOCK}
+	rm -f /install/domain.info
 	_success "${APP_TITLE} lock removed."
 }
 

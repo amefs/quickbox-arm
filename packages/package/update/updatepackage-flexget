@@ -219,8 +219,8 @@ function _updateApp() {
 		su ${username} -c 'python2 -m pip uninstall flexget -y' >>"${OUTTO}" 2>&1
 		su ${username} -c 'python3 -m pip uninstall flexget -y' >>"${OUTTO}" 2>&1
 		if [[ -f /install/.transmission.lock ]]; then
-			_execute 'python2 -m pip uninstall transmissionrpc -y'
-			_execute 'python3 -m pip uninstall transmissionrpc -y'
+			_execute 'python2 -m pip uninstall transmission-rpc -y'
+			_execute 'python3 -m pip uninstall transmission-rpc -y'
 		fi
 		if [[ -f /install/.deluge.lock ]]; then
 			_execute 'python2 -m pip uninstall deluge-client -y'
@@ -231,8 +231,8 @@ function _updateApp() {
 	fi
 	_info "Building ${APP_TITLE}..."
 	# Install for single user
-	_installPy 3.7.7
-	_initPyVenv 3.7.7 /home/${username}/.local/flexget3 ${username}
+	_installPy 3.8.12
+	_initPyVenv 3.8.12 /home/${username}/.local/flexget3 ${username}
 	cd /home/${username}/.local/flexget3
 	_info "Installing requirements... "
 	sudo -u ${username} -H bash -c "wget -q -O get-pip.py https://bootstrap.pypa.io/get-pip.py" >>"${OUTTO}" 2>&1
@@ -245,7 +245,7 @@ function _updateApp() {
 	_info "Installing ${APP_TITLE}... "
 	sudo -u ${username} -H bash -c "/home/${username}/.local/flexget3/bin/pip install --upgrade flexget" >>"${OUTTO}" 2>&1
 	if [[ -f /install/.transmission.lock ]]; then
-		sudo -u ${username} -H bash -c "/home/${username}/.local/flexget3/bin/pip install transmissionrpc" >>"${OUTTO}" 2>&1
+		sudo -u ${username} -H bash -c "/home/${username}/.local/flexget3/bin/pip install transmission-rpc" >>"${OUTTO}" 2>&1
 	fi
 	if [[ -f /install/.deluge.lock ]]; then
 		sudo -u ${username} -H bash -c "/home/${username}/.local/flexget3/bin/pip install deluge-client" >>"${OUTTO}" 2>&1
@@ -294,10 +294,10 @@ diff -Nur '--exclude=.git' '--exclude=.vs' flexget/webserver.py flexget-patched/
      session.commit()
 EOF
 	sed -i "s/username='replace'/username='${username}'/g" /tmp/flexget-user-passwd.patch
-	patch -p1 -d ${pylib}/python3.7/site-packages/flexget/ </tmp/flexget-user-passwd.patch >>"${OUTTO}" 2>&1
-	sudo -u ${username} -H bash -c "${pybin}/python -m compileall ${pylib}/python3.7/site-packages/flexget/webserver.py" >>"${OUTTO}" 2>&1
+	patch -p1 -d ${pylib}/python3.8/site-packages/flexget/ </tmp/flexget-user-passwd.patch >>"${OUTTO}" 2>&1
+	sudo -u ${username} -H bash -c "${pybin}/python -m compileall ${pylib}/python3.8/site-packages/flexget/webserver.py" >>"${OUTTO}" 2>&1
 	rm -rf /tmp/flexget-user-passwd.patch
-	jspath=$(grep -rnw "${pylib}/python3.7/site-packages/flexget/ui/v2/dist/assets/" -e '"flexget"' | cut -d: -f1)
+	jspath=$(grep -rnw "${pylib}/python3.8/site-packages/flexget/ui/v2/dist/assets/" -e '"flexget"' | cut -d: -f1)
 	sed -i "s/initialValues:{username:\"flexget\"/initialValues:{username:\"\"/g" ${jspath}
 
 	PORT=$(cat /install/$username.flexget.port)

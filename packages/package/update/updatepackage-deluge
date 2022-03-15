@@ -2,7 +2,7 @@
 #
 # [QuickBox ARM Deluge Updater]
 #
-# GitHub:   https://github.com/amefs/quickbox-lite
+# GitHub:   https://github.com/amefs/quickbox-arm
 # Author:   Amefs
 # Current version:  v1.0.0
 # URL:
@@ -90,7 +90,7 @@ BRANCH_LT="https://github.com/arvidn/libtorrent.git"
 # SCRIPT FUNCTIONS
 ################################################################################
 function _usage() {
-	echo -e "\nQuickBox Lite $APP_TITLE Updater"
+	echo -e "\nQuickBox ARM $APP_TITLE Updater"
 	echo -e "\nUsage: \n$(basename "$0") [-h] [-l logfile] [--qb]"
 	echo -e "\nOptions:\n"
 	echo "-l, --log <logfile>       specific log file"
@@ -355,7 +355,7 @@ function _updateLibt() {
 			_execute "make -j$(nproc)"
 			mkdir -p /tmp/dist/libtorrent-rasterbar/usr/local
 			_execute "make install"
-			fpm --verbose --python-bin=python3 --python-package-name-prefix=python3 -n python3-libtorrent -f -p /root/pool/python3-libtorrent_${libtversion}.deb --version ${libtversion} --description "Libtorrent rasterbar python bindings compiled by QuickBox Lite" -s python -t deb /tmp/libtorrent/bindings/python/setup.py >>${OUTTO} 2>&1
+			fpm --verbose --python-bin=python3 --python-package-name-prefix=python3 -n python3-libtorrent -f -p /root/pool/python3-libtorrent_${libtversion}.deb --version ${libtversion} --description "Libtorrent rasterbar python bindings compiled by QuickBox ARM" -s python -t deb /tmp/libtorrent/bindings/python/setup.py >>${OUTTO} 2>&1
 			_execute "dpkg -i /root/pool/python3-libtorrent_${libtversion}.deb"
 			echo ${libtversion} >/install/.libtorrent-rasterbar-python3.lock
 			_success "Libtorrent python binding built ..."
@@ -384,6 +384,7 @@ function _updateDeluge() {
 		_execute "pip3 install --upgrade wheel"
 		_execute "pip3 install --upgrade cryptography"
 		_execute "pip3 install --upgrade twisted[tls]"
+		_execute "pip3 install --upgrade --force-reinstall pyOpenSSL"
 		DEBASE="deluge-common_${deversion}-1build1_all.deb deluge-console_${deversion}-1build1_all.deb deluge-gtk_${deversion}-1build1_all.deb deluge-web_${deversion}-1build1_all.deb deluged_${deversion}-1build1_all.deb"
 		for DEB in $DEBASE; do
 			_download ${PACKAGE} ${DEB}
@@ -403,6 +404,7 @@ function _updateDeluge() {
 		_execute "pip3 install --upgrade wheel"
 		_execute "pip3 install --upgrade cryptography"
 		_execute "pip3 install --upgrade twisted[tls]"
+		_execute "pip3 install --upgrade --force-reinstall pyOpenSSL"
 		tar -xf deluge-${deversion}.tar.xz
 		cd deluge-${deversion} || exit 1
 		_execute "python3 setup.py build"

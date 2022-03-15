@@ -71,7 +71,7 @@ function _error() {
 #################################################################################
 APP_TITLE="ruTorrent"
 APP_NAME="rutorrent"
-APP_BASEDEPS="sox libsox-fmt-mp3 geoip-database python-dev python-cryptography python-openssl python-setuptools mediainfo zip unzip"
+APP_BASEDEPS="sox libsox-fmt-mp3 geoip-database mediainfo zip unzip"
 
 APP_LOCK=.$APP_NAME.lock
 OUTTO=/srv/dashboard/db/output.log
@@ -250,6 +250,10 @@ EOF
 	sed -i 's/useExternal = false;/useExternal = "mktorrent";/' /srv/rutorrent/plugins/create/conf.php
 	sed -i 's/pathToCreatetorrent = '\'\''/pathToCreatetorrent = '\''\/usr\/bin\/mktorrent'\''/' /srv/rutorrent/plugins/create/conf.php
 	sed -i "s/\$pathToExternals\['sox'\] = ''/\$pathToExternals\['sox'\] = '\/usr\/bin\/sox'/g" /srv/rutorrent/plugins/spectrogram/conf.php
+
+	if [[ ! -d /srv/rutorrent/home/db/ ]]; then
+		mkdir -p /srv/rutorrent/home/db/
+	fi
 
 	if [[ ! -d /srv/rutorrent/plugins/theme/themes/club-QuickBox ]]; then
 		cd /srv/rutorrent/plugins/theme/themes || { _error "Can not install ruTorrent theme " && exit 1; }

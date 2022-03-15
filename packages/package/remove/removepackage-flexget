@@ -149,8 +149,8 @@ function _removeApp() {
 		su ${username} -c 'python2 -m pip uninstall flexget -y' >>"${OUTTO}" 2>&1
 		su ${username} -c 'python3 -m pip uninstall flexget -y' >>"${OUTTO}" 2>&1
 		if [[ -f /install/.transmission.lock ]]; then
-			_execute 'python2 -m pip uninstall transmissionrpc -y'
-			_execute 'python3 -m pip uninstall transmissionrpc -y'
+			_execute 'python2 -m pip uninstall transmission-rpc -y'
+			_execute 'python3 -m pip uninstall transmission-rpc -y'
 		fi
 		if [[ -f /install/.deluge.lock ]]; then
 			_execute 'python2 -m pip uninstall deluge-client -y'

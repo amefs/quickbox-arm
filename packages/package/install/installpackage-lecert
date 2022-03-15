@@ -71,7 +71,7 @@ function _error() {
 #################################################################################
 APP_TITLE="Let's Encrypt"
 APP_NAME="lecert"
-APP_BASEDEPS=""
+APP_BASEDEPS="socat"
 
 APP_LOCK=.$APP_NAME.lock
 OUTTO=/srv/dashboard/db/output.log
@@ -173,16 +173,17 @@ function _installDepends() {
 
 function _installApp() {
 	_info "Building ${APP_TITLE}..."
-	cd /root
 	mkdir -p /srv/.well-known/acme-challenge
 	chown -R root:www-data /srv/.well-known
-	if [[ -d /root/acme.sh ]]; then
-		rm -rf /root/acme.sh
+	if [[ -d /root/.acme.sh ]]; then
+		rm -rf /root/.acme.sh
 	fi
-	_execute "git clone https://github.com/Neilpang/acme.sh.git"
-	cd /root/acme.sh || { _error "Can not download acme.sh ..." && exit 1; }
+	cd /tmp
+	_execute "git clone https://github.com/Neilpang/acme.sh.git /root/.acme.sh"
+	cd /root/.acme.sh || { _error "Can not download acme.sh ..." && exit 1; }
 	./acme.sh --install >/dev/null 2>&1
-	mkdir -p /etc/nginx/ssl/$domain/
+	./acme.sh --register-account -m domain@example.com >>"${OUTTO}" 2>&1
+	mkdir -p /etc/nginx/ssl/${domain}/
 	_success "${APP_TITLE} Built."
 }
 
@@ -240,13 +241,15 @@ server {
 }
 NGC
 	_execute "nginx -s reload"
-
-	# make acme redirect
-	cat >"/etc/nginx/snippets/letsencrypt-webroot.conf" <<EOF
-location /.well-known/acme-challenge/ {
-    alias /srv/.well-known/acme-challenge/;
-}
-EOF
+	mkdir -p /root/.quickbox/logs/
+	cd /root/.acme.sh || exit 1
+	./acme.sh --issue --nginx --domain ${domain} --force \
+--keylength ec-384 \
+--key-file /etc/nginx/ssl/${domain}/${domain}-key.pem \
+--cert-file /etc/nginx/ssl/${domain}/${domain}-cert.pem \
+--fullchain-file /etc/nginx/ssl/${domain}/${domain}-ssl.pem \
+--reloadcmd "systemctl reload nginx.service; systemctl restart vsftpd.service" \
+--log /root/.quickbox/logs/${domain}.log >>"${OUTTO}" 2>&1
 
 	cat >/etc/nginx/sites-enabled/default <<EOF
 server {
@@ -271,8 +274,8 @@ server {
     listen 443 ssl http2 default_server;
     listen [::]:443 ssl http2 default_server;
     server_name ${domain};
-    ssl_certificate /etc/nginx/ssl/${domain}/${domain}-fullchain.pem;
-    ssl_certificate_key /etc/nginx/ssl/${domain}/${domain}-privkey.pem;
+    ssl_certificate /etc/nginx/ssl/${domain}/${domain}-ssl.pem;
+    ssl_certificate_key /etc/nginx/ssl/${domain}/${domain}-key.pem;
     include snippets/ssl-params.conf;
     client_max_body_size 40M;
     server_tokens off;
@@ -303,12 +306,10 @@ EOF
 		sed -i 's/listen \[::\]:80 default_server;/#listen \[::\]:80 default_server;/g' /etc/nginx/sites-enabled/default
 		sed -i 's/listen \[::\]:443 ssl http2 default_server;/#listen \[::\]:443 ssl http2 default_server;/g' /etc/nginx/sites-enabled/default
 	fi
-	command="30 2 * * 1 '~/acme.sh/acme.sh' --cron --home '~/acme.sh' > /dev/null"
-	(
-		crontab -u root -l
-		echo "${command}"
-	) | crontab -u root -
 	hostnamectl set-hostname ${domain}
+
+	# cronjob
+	_execute "./acme.sh --install-cronjob"
 
 	_success "${APP_TITLE} configured."
 }
@@ -316,19 +317,23 @@ EOF
 function _installAppLock() {
 	_info "Configuring ${APP_TITLE} lock..."
 	touch /install/${APP_LOCK}
+	echo ${domain} >> /install/domain.info
 	_success "${APP_TITLE} lock configured."
 }
 
 function _installAppStart() {
 	_info "Starting ${APP_TITLE}..."
-	./acme.sh --issue -d $domain -w /srv >/dev/null 2>&1
-	./acme.sh --install-cert -d $domain \
-	--cert-file /etc/nginx/ssl/$domain/$domain-ssl.pem \
-	--key-file /etc/nginx/ssl/$domain/$domain-privkey.pem \
-	--fullchain-file /etc/nginx/ssl/$domain/$domain-fullchain.pem \
-	--reloadcmd "systemctl reload nginx.service" \
-	--log /root/.quickbox/logs/${domain}.log >/dev/null 2>&1
-	_success "${APP_TITLE} started."
+	# vsftpd tls
+	ftp_ip=$(cat /etc/vsftpd.conf | grep pasv_address | grep -Eo "[0-9.]+")
+	mv /etc/vsftpd.conf /root/.vsftpd.conf.bak
+	\cp -rf /etc/QuickBox/setup/templates/vsftpd/vsftpd.conf.tls.template /etc/vsftpd.conf
+	sed -i 's/^\(pasv_min_port=\).*/\110090/' /etc/vsftpd.conf
+	sed -i 's/^\(pasv_max_port=\).*/\110100/' /etc/vsftpd.conf
+	sed -i "s/^\(rsa_cert_file=\).*/rsa_cert_file=\/etc\/nginx\/ssl\/$domain\/$domain-ssl.pem/" /etc/vsftpd.conf
+	sed -i "s/^\(rsa_private_key_file=\).*/rsa_private_key_file=\/etc\/nginx\/ssl\/$domain\/$domain-key.pem/" /etc/vsftpd.conf
+	echo "pasv_address=$ftp_ip" >>/etc/vsftpd.conf
+	_execute "systemctl restart vsftpd.service"
+	_execute "systemctl restart nginx.service"
 }
 
 #################################################################################
@@ -373,6 +378,8 @@ fi
 _lockCheck
 _setLock
 _installInfo
+_installSystemUpdates
+_installDepends
 _installApp
 _configureApp
 _installAppLock

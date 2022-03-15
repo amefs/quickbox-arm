@@ -203,7 +203,7 @@ function _installApp() {
 	mkdir -p /tmp/dist/znc/usr/local
 	mkdir -p /root/pool
 	_execute "make install"
-	fpm -f -C /tmp/dist/znc -p /root/pool/znc_${ZNCVERSION}.deb -s dir -t deb -n znc --version ${ZNCVERSION} --description "znc compiled by QuickBox Lite" >/dev/null 2>&1
+	fpm -f -C /tmp/dist/znc -p /root/pool/znc_${ZNCVERSION}.deb -s dir -t deb -n znc --version ${ZNCVERSION} --description "znc compiled by QuickBox ARM" >/dev/null 2>&1
 	_execute "dpkg -i /root/pool/znc_${ZNCVERSION}.deb"
 	cd /tmp
 	rm -rf /tmp/{znc-latest,znc-latest.tar.gz} >/dev/null 2>&1

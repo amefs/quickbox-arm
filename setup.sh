@@ -16,6 +16,7 @@
 #   including (via compiler) GPL-licensed code must also be made available
 #   under the GPL along with build & install instructions.
 #
+# shellcheck disable=SC2046,SC1090,SC2181,SC2059
 #################################################################################
 
 function _defaultcolor() {
@@ -109,7 +110,7 @@ function _init() {
 		echo -e "XXX\n10\nPreparing scripts... \nXXX"
 		if [[ $DISTRO == Ubuntu && $CODENAME == xenial ]]; then
 			apt-get -y install git curl wget dos2unix python-minimal apt-transport-https software-properties-common dnsutils unzip >/dev/null 2>&1
-		elif [[ $DISTRO == Ubuntu && $CODENAME == bionic ]]; then
+		elif [[ $DISTRO == Ubuntu && $CODENAME =~ ("bionic"|"focal") ]]; then
 			apt-get -y install git curl wget dos2unix python apt-transport-https software-properties-common dnsutils unzip >/dev/null 2>&1
 		elif [[ $DISTRO == Debian ]]; then
 			apt-get -y install git curl wget dos2unix python apt-transport-https software-properties-common gnupg2 ca-certificates dnsutils unzip >/dev/null 2>&1
@@ -235,6 +236,36 @@ function _logcheck() {
 	fi
 }
 
+function _get_ip() {
+	ip=$(curl -s https://ipinfo.io/ip)
+	[[ -z ${ip} ]] && ip=$(curl -s https://api.ip.sb/ip)
+	[[ -z ${ip} ]] && ip=$(curl -s https://api.ipify.org)
+	[[ -z ${ip} ]] && ip=$(curl -s https://ip.seeip.org)
+	[[ -z ${ip} ]] && ip=$(curl -s https://ifconfig.co/ip)
+	[[ -z ${ip} ]] && ip=$(curl -s https://api.myip.com | grep -oE "([0-9]{1,3}\.){3}[0-9]{1,3}")
+	[[ -z ${ip} ]] && ip=$(curl -s icanhazip.com)
+	[[ -z ${ip} ]] && ip=$(curl -s myip.ipip.net | grep -oE "([0-9]{1,3}\.){3}[0-9]{1,3}")
+}
+
+function _askdomain() {
+	if (whiptail --title "$INFO_TITLE_DOMAIN" --yesno "$INFO_TEXT_DOMAIN" --yes-button "$BUTTON_YES" --no-button "$BUTTON_NO" --defaultno 8 72); then
+		while [[ $domain == "" ]]; do
+			domain=$(whiptail --title "$INFO_TITLE_SETDOMAIN" --inputbox "$INFO_TEXT_SETDOMAIN" 10 72 --ok-button "$BUTTON_OK" --cancel-button "$BUTTON_CANCLE" 3>&1 1>&2 2>&3)
+			_get_ip
+			test_domain=$(curl -sH 'accept: application/dns-json' "https://cloudflare-dns.com/dns-query?name=$domain&type=A" | grep -oE "([0-9]{1,3}\.){3}[0-9]{1,3}" | head -1)
+			if [[ $test_domain != "${ip}" ]]; then
+				whiptail --title "$ERROR_TITLE_DOMAINCHK" --msgbox "${ERROR_TEXT_DOMAINCHK_1}$domain${ERROR_TEXT_DOMAINCHK_2}" --ok-button "$BUTTON_OK" 8 72
+				domain=""
+			else
+				whiptail --title "$INFO_TITLE_DOMAINCHK" --msgbox "${INFO_TEXT_DOMAINCHK_1}$domain${INFO_TEXT_DOMAINCHK_2}" --ok-button "$BUTTON_OK" 8 72
+				hostname=$domain
+			fi
+		done
+	else
+		domain=""
+	fi
+}
+
 function _askhostname() {
 	hostname=$(whiptail --title "$INFO_TITLE_HOSTNAME" --inputbox "$INFO_TEXT_HOSTNAME" 10 72 --ok-button "$BUTTON_OK" --cancel-button "$BUTTON_CANCLE" 3>&1 1>&2 2>&3)
 }
@@ -288,7 +319,7 @@ function _askusrname() {
 		# ensure vaild username
 		valid=$(echo "$username" | grep -P '^[a-z][-a-z0-9_]*')
 		_errorcolor
-		if $(echo "${reserved_names[@]}" | grep -wq "$username"); then
+		if echo "${reserved_names[@]}" | grep -wq "$username"; then
 			whiptail --title "$ERROR_TITLE_NAME" --msgbox "$ERROR_TEXT_NAME_1" --ok-button "$BUTTON_OK" 8 72
 			valid=false
 		elif [[ $count -lt 3 || $count -gt 32 ]]; then
@@ -355,7 +386,7 @@ function _skel() {
 	mkdir -p /etc/skel
 	cp -rf ${local_setup_template}skel /etc
 	# init download url
-	case "$cdn" in
+	case "${cdn}" in
 	"--with-cf")
 		_cf
 		echo "cf" > /install/.cdn.lock
@@ -453,34 +484,35 @@ function _genadmin() {
 	# save account info to file
 	local passphrase
 	passphrase=$(openssl rand -hex 64)
-	if [[ $CODENAME == xenial ]]; then
+	# shellcheck disable=SC2091
+	if ! $(openssl version | awk '$2 ~ /(^0\.)|(^1\.(0\.|1\.0))/ { exit 1 }'); then
 		echo "${username}:$(echo "${password}" | openssl enc -aes-128-ecb -a -e -pass pass:"${passphrase}" -nosalt)" >/root/.admin.info
 	else
 		echo "${username}:$(echo "${password}" | openssl enc -aes-128-ecb -pbkdf2 -a -e -pass pass:"${passphrase}" -nosalt)" >/root/.admin.info
 	fi
 	mkdir -p /root/.qbuser
-	cp /root/.admin.info /root/.qbuser/${username}.info
+	cp /root/.admin.info /root/.qbuser/"${username}".info
 	mkdir -p /root/.ssh
 	echo "${passphrase}" >/root/.ssh/local_user
 	chmod 600 /root/.ssh/local_user && chmod 700 /root/.ssh
 	# create account
 	if [[ -d /home/$username ]]; then
 		cd /etc/skel || exit 1
-		cp -fR . /home/$username/
+		cp -fR . /home/"${username}"/
 	else
 		useradd "${username}" -m -G www-data -s /bin/bash
 	fi
 	chpasswd <<<"${username}:${password}"
 	echo "${username}:$(openssl passwd -apr1 "${password}")" >/etc/htpasswd
 	mkdir -p /etc/htpasswd.d/
-	echo "${username}:$(openssl passwd -apr1 "${password}")" >/etc/htpasswd.d/htpasswd.${username}
-	chown -R $username:$username /home/${username}
-	chmod 750 /home/${username}
-	echo "D /var/run/${username} 0750 ${username} ${username} -" >>/etc/tmpfiles.d/${username}.conf
-	systemd-tmpfiles /etc/tmpfiles.d/${username}.conf --create >>"${OUTTO}" 2>&1
+	echo "${username}:$(openssl passwd -apr1 "${password}")" >/etc/htpasswd.d/htpasswd."${username}"
+	chown -R "${username}":"${username}" /home/"${username}"
+	chmod 750 /home/"${username}"
+	echo "D /var/run/${username} 0750 ${username} ${username} -" >>/etc/tmpfiles.d/"${username}".conf
+	systemd-tmpfiles /etc/tmpfiles.d/"${username}".conf --create >>"${OUTTO}" 2>&1
 	# setup sudoers
 	cp ${local_setup_template}sudoers.template /etc/sudoers.d/dashboard
-	if grep ${username} /etc/sudoers.d/quickbox >/dev/null 2>&1; then
+	if grep "${username}" /etc/sudoers.d/quickbox >/dev/null 2>&1; then
 		echo "No sudoers modification made ... " >>"${OUTTO}" 2>&1
 	else
 		echo "${username} ALL=(ALL:ALL) ALL" >>/etc/sudoers.d/quickbox
@@ -494,9 +526,10 @@ if [ -f ~/.bash_qb ]; then
 fi
 EOF
 		cp ${local_setup_template}bash_qb.template /root/.bash_qb
+		cp ${local_setup_template}bash_qb_extras.template /root/.bash_qb_extras
 	fi
 	# set home permission
-	chmod 755 /home/${username}
+	chmod 755 /home/"${username}"
 }
 
 function _askvsftpd() {
@@ -504,8 +537,8 @@ function _askvsftpd() {
 	if (whiptail --title "$INFO_TITLE_FTP" --yesno "$INFO_TEXT_FTP" --yes-button "$BUTTON_YES" --no-button "$BUTTON_NO" 8 72); then
 		ftp=1
 		ftp_ip=""
-		ftp_ip=$(whiptail --title "$INFO_TITLE_FTP_IP" --inputbox "${INFO_TEXT_FTP_IP_1} $ip\n${INFO_TEXT_FTP_IP_2}" 10 72 --ok-button "$BUTTON_OK" --cancel-button "$BUTTON_CANCLE" 3>&1 1>&2 2>&3)
-		if [[ $ftp_ip == "" ]]; then ftp_ip=$ip; fi
+		ftp_ip=$(whiptail --title "$INFO_TITLE_FTP_IP" --inputbox "${INFO_TEXT_FTP_IP_1} ${ip}\n${INFO_TEXT_FTP_IP_2}" 10 72 --ok-button "$BUTTON_OK" --cancel-button "$BUTTON_CANCLE" 3>&1 1>&2 2>&3)
+		if [[ $ftp_ip == "" ]]; then ftp_ip=${ip}; fi
 	else
 		ftp=0
 	fi
@@ -536,6 +569,12 @@ function _askdashtheme() {
 			3>&1 1>&2 2>&3
 		)
 	done
+}
+
+function _askchangetz() {
+	if (whiptail --title "$INFO_TITLE_TZ" --yesno "$INFO_TEXT_TZ" --yes-button "$BUTTON_YES" --no-button "$BUTTON_NO" --defaultno 8 72); then
+		dpkg-reconfigure tzdata
+	fi
 }
 
 function _askchsource() {
@@ -648,6 +687,7 @@ deb https://packages.sury.org/php/ $(lsb_release -sc) main
 DPHP
 	fi
 	DEBIAN_FRONTEND=noninteractive apt-get -yqq -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" update >>"${OUTTO}" 2>&1
+	# shellcheck disable=SC2154
 	echo -e "XXX\n12\n${INFO_TEXT_PROGRESS_Extra_1}\nXXX"
 	DEBIAN_FRONTEND=noninteractive apt-get -yqq -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" upgrade --allow-unauthenticated >>"${OUTTO}" 2>&1
 	# auto solve dpkg lock
@@ -656,11 +696,13 @@ DPHP
 		locks=$(find /var/lib/dpkg/lock* && find /var/cache/apt/archives/lock*)
 		if [[ ${locks} == $(find /var/lib/dpkg/lock* && find /var/cache/apt/archives/lock*) ]]; then
 			for l in ${locks}; do
-				rm -rf ${l}
+				rm -rf "${l}"
 			done
-			dpkg --configure -a >>"${OUTTO}" 2>&1
-			DEBIAN_FRONTEND=noninteractive apt-get -yqq -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" update >>"${OUTTO}" 2>&1
-			DEBIAN_FRONTEND=noninteractive apt-get -yqq -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" upgrade >>"${OUTTO}" 2>&1
+			{
+				dpkg --configure -a
+				DEBIAN_FRONTEND=noninteractive apt-get -yqq -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" update
+				DEBIAN_FRONTEND=noninteractive apt-get -yqq -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" upgrade
+			} >>"${OUTTO}" 2>&1
 		fi
 		if ! (apt-get check >/dev/null); then
 			apt-get install -f >>"${OUTTO}" 2>&1
@@ -688,7 +730,7 @@ function _preinsngx() {
 function _dependency() {
 	_addPHP
 	_preinsngx
-	DEPLIST="sudo bc build-essential curl wget subversion ssl-cert php7.4-cli php7.4-fpm php7.4 php7.4-dev php7.4-memcached memcached php7.4-curl php7.4-gd php7.4-json php7.4-mbstring php7.4-opcache php7.4-xml php7.4-xmlrpc php7.4-zip libfcgi0ldbl mcrypt libmcrypt-dev nano python-dev unzip htop iotop vnstat vnstati automake make openssl net-tools debconf-utils ntp rsync"
+	DEPLIST="sudo at bc build-essential curl wget subversion ssl-cert php7.4-cli php7.4-fpm php7.4 php7.4-dev php7.4-memcached memcached php7.4-curl php7.4-gd php7.4-json php7.4-mbstring php7.4-opcache php7.4-xml php7.4-xmlrpc php7.4-zip libfcgi0ldbl mcrypt libmcrypt-dev nano python-dev unzip htop iotop vnstat vnstati automake make openssl net-tools debconf-utils ntp rsync"
 	for depend in $DEPLIST; do
 		echo -e "XXX\n12\n$INFO_TEXT_PROGRESS_Extra_2${depend}\nXXX"
 		DEBIAN_FRONTEND=noninteractive apt-get -y --allow-unauthenticated -f install ${depend} >>${OUTTO} 2>&1 || { local dependError=1; }
@@ -765,8 +807,23 @@ function _insngx() {
 function _insnodejs() {
 	# install Nodejs for background service
 	cd /tmp || exit 1
-	curl -sL https://deb.nodesource.com/setup_12.x -o nodesource_setup.sh
-	sudo bash nodesource_setup.sh >>"${OUTTO}" 2>&1
+	curl -sL https://deb.nodesource.com/setup_14.x -o nodesource_setup.sh
+	bash nodesource_setup.sh >>"${OUTTO}" 2>&1
+	exitstatus=$?
+	counter=0
+	while [[ ${exitstatus} -eq 1 ]]; do
+		if [[ ${counter} -gt 2 ]]; then
+			_errorcolor
+			echo -e "XXX\n00\n${ERROR_TEXT_NODEJS}\nXXX"
+			_defaultcolor
+			echo ">> ${ERROR_TEXT_NODEJS}" >>"${OUTTO}" 2>&1
+			exit 1
+		else
+			bash nodesource_setup.sh >>"${OUTTO}" 2>&1
+			exitstatus=$?
+			((counter++))
+		fi
+	done
 	apt-get install -y nodejs >>"${OUTTO}" 2>&1
 	if [[ -f /tmp/nodesource_setup.sh ]]; then
 		rm nodesource_setup.sh
@@ -790,8 +847,8 @@ EOF
 	service shellinabox stop >/dev/null 2>&1
 	rm -rf /etc/init.d/shellinabox
 
-	if [[ ! -f /etc/nginx/apps/${username}.console.conf ]]; then
-		cat >/etc/nginx/apps/${username}.console.conf <<WEBC
+	if [[ ! -f /etc/nginx/apps/"${username}".console.conf ]]; then
+		cat > /etc/nginx/apps/"${username}".console.conf <<WEBC
 location /${username}.console/ {
     proxy_pass        http://127.0.0.1:4200;
     #auth_basic "What's the password?";
@@ -829,12 +886,9 @@ function _insdashboard() {
 	cd && mkdir -p /srv/dashboard
 	\cp -fR ${local_setup_dashboard}. /srv/dashboard
 	touch /srv/dashboard/db/output.log
-	/usr/local/bin/quickbox/system/theme/themeSelect-${dash_theme}
+	/usr/local/bin/quickbox/system/theme/themeSelect-"${dash_theme}"
 	IFACE=$(ip link show | grep -i broadcast | grep -m1 UP | cut -d: -f 2 | cut -d@ -f 1 | sed -e 's/ //g')
 	echo "${IFACE}" >/srv/dashboard/db/interface.txt
-	sed -i "s/INETFACE/${IFACE}/g" /srv/dashboard/widgets/stat.php
-	sed -i "s/INETFACE/${IFACE}/g" /srv/dashboard/widgets/data.php
-	sed -i "s/INETFACE/${IFACE}/g" /srv/dashboard/widgets/bw_tables.php
 	sed -i "s/INETFACE/${IFACE}/g" /srv/dashboard/inc/config.php
 	echo "${username}" >/srv/dashboard/db/master.txt
 	chown -R www-data: /srv/dashboard
@@ -862,7 +916,7 @@ function _insdashboard() {
 	fi
 	touch /install/.dashboard.lock
 	cd /srv/dashboard/ws || exit 1
-	npm install --production >>"${OUTTO}" 2>&1
+	npm ci --production >>"${OUTTO}" 2>&1
 	\cp -f ${local_setup_template}systemd/quickbox-ws.service.template /etc/systemd/system/quickbox-ws.service
 	systemctl daemon-reload >/dev/null 2>&1
 	systemctl enable quickbox-ws.service >/dev/null 2>&1
@@ -907,7 +961,7 @@ function _askrtgui() {
 function _insapps() {
 	if [[ "$app_list" =~ "rtorrent" ]]; then
 		echo -e "XXX\n30\n$INFO_TEXT_INSTALLAPP_1\nXXX"
-		bash ${local_setup_script}rtorrent.sh "${OUTTO}" "${rtgui}" "$cdn" >/dev/null 2>&1
+		bash ${local_setup_script}rtorrent.sh "${OUTTO}" "${rtgui}" "${cdn}" "${rt_ver}" >/dev/null 2>&1
 		echo -e "XXX\n36\n$INFO_TEXT_INSTALLAPP_1$INFO_TEXT_DONE\nXXX"
 	else
 		echo -e "XXX\n36\n$INFO_TEXT_INSTALLAPP_1$INFO_TEXT_SKIP\nXXX"
@@ -915,7 +969,7 @@ function _insapps() {
 	sleep 1
 	if [[ "$app_list" =~ "transmission" ]]; then
 		echo -e "XXX\n36\n$INFO_TEXT_INSTALLAPP_2\nXXX"
-		bash ${local_setup_script}transmission.sh "${OUTTO}" "$cdn" >/dev/null 2>&1
+		bash ${local_setup_script}transmission.sh "${OUTTO}" "${cdn}" >/dev/null 2>&1
 		echo -e "XXX\n43\n$INFO_TEXT_INSTALLAPP_2$INFO_TEXT_DONE\nXXX"
 	else
 		echo -e "XXX\n43\n$INFO_TEXT_INSTALLAPP_2$INFO_TEXT_SKIP\nXXX"
@@ -923,7 +977,7 @@ function _insapps() {
 	sleep 1
 	if [[ "$app_list" =~ "qbittorrent" ]]; then
 		echo -e "XXX\n43\n$INFO_TEXT_INSTALLAPP_3\nXXX"
-		bash ${local_setup_script}qbittorrent.sh "${OUTTO}" "$cdn" >/dev/null 2>&1
+		bash ${local_setup_script}qbittorrent.sh "${OUTTO}" "${cdn}" "${qbit_ver}" "${qbit_libt_ver}" >/dev/null 2>&1
 		echo -e "XXX\n49\n$INFO_TEXT_INSTALLAPP_3$INFO_TEXT_DONE\nXXX"
 	else
 		echo -e "XXX\n49\n$INFO_TEXT_INSTALLAPP_3$INFO_TEXT_SKIP\nXXX"
@@ -931,7 +985,7 @@ function _insapps() {
 	sleep 1
 	if [[ "$app_list" =~ "deluge" ]]; then
 		echo -e "XXX\n49\n$INFO_TEXT_INSTALLAPP_4\nXXX"
-		bash ${local_setup_script}deluge.sh "${OUTTO}" "$cdn" >/dev/null 2>&1
+		bash ${local_setup_script}deluge.sh "${OUTTO}" "${cdn}"  "${de_ver}" "${de_libt_ver}" >/dev/null 2>&1
 		echo -e "XXX\n56\n$INFO_TEXT_INSTALLAPP_4$INFO_TEXT_DONE\nXXX"
 	else
 		echo -e "XXX\n56\n$INFO_TEXT_INSTALLAPP_4$INFO_TEXT_SKIP\nXXX"
@@ -1115,8 +1169,8 @@ function _startinstall() {
 	timeusedmin=$((timeused / 60))
 	echo -e "\n#################################################################################" >>"${OUTTO}" 2>&1
 	echo "Install finished in $timeusedmin Min" >>"${OUTTO}" 2>&1
-	if [[ $autoreboot == 1 ]]; then 
-		reboot; 
+	if [[ $autoreboot == 1 ]]; then
+		reboot
 	elif [[ $autoreboot == 3 ]]; then 
 		exit 0
 	fi
@@ -1214,6 +1268,7 @@ function _usage() {
   -r, --reboot                     reboot after installation finished (default no)
   -s, --source <tuna|ustc>         choose apt source (default unchange)
   -t, --theme <defaulted|smoked>   choose a theme for your dashboard (default smoked)
+  --tz,--timezone <timezone>       setup a timezone for server (e.g. GMT-8 or Europe/Berlin)
   --lang <en|zh>                   choose a TUI language (default english)
   --with-log,no-log                install with log to file or not (default yes)
   --with-ftp,--no-ftp              install ftp or not (default yes)
@@ -1223,6 +1278,11 @@ function _usage() {
   --with-osdn                      use osdn(jp) instead of sourceforge
   --with-github                    use github
   --with-APPNAME                   install an application
+  --qbittorrent-version            specify the qBittorrent version
+  --deluge-version                 specify the Deluge version
+  --qbit-libt-version              specify the Libtorrent version for qBittorrent
+  --de-libt-version                specify the Libtorrent version for Deluge
+  --rtorrent-version               specify the rTorrent version
 
     Available applications:
     rtorrent | rutorrent | flood | transmission | qbittorrent
@@ -1244,14 +1304,20 @@ chsource=0
 autoreboot=3
 dash_theme="smoked"
 hostname=""
+timezone=""
 domain=""
 app_list=""
 rtgui="rutorrent"
+qbit_ver=""
+de_ver=""
+qbit_libt_ver=""
+de_libt_ver=""
+rt_ver=""
 
 #################################################################################
 # OPT GENERATOR
 #################################################################################
-if ! ARGS=$(getopt -a -o d:hrH:p:P:s:t:u: -l domain:,help,ftp-ip:,lang:,reboot,with-log,no-log,with-ftp,no-ftp,with-cf,with-sf,with-osdn,with-github,with-rtorrent,with-rutorrent,with-flood,with-transmission,with-qbittorrent,with-deluge,with-mktorrent,with-ffmpeg,with-filebrowser,with-linuxrar,hostname:,port:,username:,password:,source:,theme: -- "$@")
+if ! ARGS=$(getopt -a -o d:hrH:p:P:s:t:u: -l domain:,help,ftp-ip:,lang:,reboot,with-log,no-log,with-ftp,no-ftp,with-cf,with-sf,with-osdn,with-github,with-rtorrent,with-rutorrent,with-flood,with-transmission,with-qbittorrent,with-deluge,with-mktorrent,with-ffmpeg,with-filebrowser,with-linuxrar,qbittorrent-version:,deluge-version:,qbit-libt-version:,de-libt-version:,rtorrent-version:,hostname:,port:,username:,password:,source:,theme:,tz:,timezone: -- "$@")
 then
 	_usage
     exit 1
@@ -1346,6 +1412,20 @@ while true; do
 		fi
 		shift
 		;;	
+	--tz | --timezone)
+		timezone="$2"
+		if echo "${timezone}" | grep -wEq 'GMT[+,-]0?[0-9]|1[0-2]'; then
+			unlink /etc/localtime
+			ln -s /usr/share/zoneinfo/Etc/"${timezone}" /etc/localtime
+		elif echo "${timezone}" | grep -wEq 'UTC'; then
+			unlink /etc/localtime
+			ln -s /usr/share/zoneinfo/Etc/"${timezone}" /etc/localtime
+		elif [[ -f /usr/share/zoneinfo/"${timezone}" ]]; then
+			unlink /etc/localtime
+			ln -s /usr/share/zoneinfo/"${timezone}" /etc/localtime
+		fi
+		shift
+		;;	
 	-s | --source)
 		if [[ "$2" =~ "tuna"|"ustc" ]]; then
 			chsource=1
@@ -1370,6 +1450,11 @@ while true; do
 	--with-ffmpeg) app_list+=" ffmpeg" ;;
 	--with-filebrowser) app_list+=" filebrowser" ;;
 	--with-linuxrar) app_list+=" linuxrar" ;;
+	--qbittorrent-version) qbit_ver="--qb $2"; shift;;
+	--deluge-version) de_ver="--de $2"; shift;;
+	--qbit-libt-version) qbit_libt_ver="--lt $2"; shift;;
+	--de-libt-version) de_libt_ver="--lt $2"; shift;;
+	--rtorrent-version) rt_ver="--version $2"; shift;;
 	--)
 		shift
 		break
@@ -1385,8 +1470,6 @@ done
 _init
 if [[ $onekey == 1 ]]; then
 	if [[ -n $username && -n $password ]]; then
-		_checkroot
-		_checkdistro
 		if [[ $uilang == "zh" ]]; then
 			source ${local_lang}zh-cn.lang
 			echo 'LANGUAGE="zh_CN.UTF-8"' >>/etc/default/locale
@@ -1394,10 +1477,12 @@ if [[ $onekey == 1 ]]; then
 		else
 			source ${local_lang}en.lang
 		fi
+		_checkroot
+		_checkdistro
 		if [[ $domain != "" ]]; then
 			_get_ip
 			test_domain=$(curl -sH 'accept: application/dns-json' "https://cloudflare-dns.com/dns-query?name=$domain&type=A" | grep -oE "([0-9]{1,3}\.){3}[0-9]{1,3}" | head -1)
-			if [[ $test_domain != $ip ]]; then
+			if [[ $test_domain != "${ip}" ]]; then
 				whiptail --title "$ERROR_TITLE_DOMAINCHK" --msgbox "${ERROR_TEXT_DOMAINCHK_1}$domain${ERROR_TEXT_DOMAINCHK_2}" --ok-button "$BUTTON_OK" 8 72
 				domain=""
 				exit 1
@@ -1454,6 +1539,7 @@ elif [[ $onekey == 0 ]]; then
 	_askpasswd
 	_askvsftpd
 	_askdashtheme
+	_askchangetz
 	_askchsource
 	_askcdn
 	_askapps

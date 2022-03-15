@@ -385,6 +385,8 @@ function _installLibt() {
 				1.2.10) LTCIMMIT="70f1de3" ;;
 				1.2.11) LTCIMMIT="471e772" ;;
 				1.2.12) LTCIMMIT="e3f2b01" ;;
+				1.2.13) LTCIMMIT="e00a152" ;;
+				1.2.14) LTCIMMIT="33a10d5" ;;
 				*) LTCIMMIT="." ;;
 				esac
 			elif [[ ${libt_major_version} == "1.1" ]]; then
@@ -445,7 +447,7 @@ function _installLibt() {
 			_execute "make -j$(nproc)"
 			mkdir -p /tmp/dist/libtorrent-rasterbar/usr/local
 			_execute "make install"
-			fpm -f -C /tmp/dist/libtorrent-rasterbar -p /root/pool/libtorrent-rasterbar_${libtversion}.deb -s dir -t deb -n libtorrent-rasterbar --version ${libtversion} --description "libtorrent-rasterbar compiled by QuickBox Lite" >>${OUTTO} 2>&1
+			fpm -f -C /tmp/dist/libtorrent-rasterbar -p /root/pool/libtorrent-rasterbar_${libtversion}.deb -s dir -t deb -n libtorrent-rasterbar --version ${libtversion} --description "libtorrent-rasterbar compiled by QuickBox ARM" >>${OUTTO} 2>&1
 			_execute "dpkg -i /root/pool/libtorrent-rasterbar_${libtversion}.deb"
 			echo ${libtversion} >/install/.libtorrent-rasterbar.lock
 			_success "Libtorrent built ..."
@@ -565,6 +567,7 @@ function _installDeluge() {
 			_execute "pip3 install --upgrade wheel"
 			_execute "pip3 install --upgrade cryptography"
 			_execute "pip3 install --upgrade twisted[tls]"
+			_execute "pip3 install --upgrade --force-reinstall pyOpenSSL"
 			DEBASE="deluge-common_${deversion}-1build1_all.deb deluge-console_${deversion}-1build1_all.deb deluge-gtk_${deversion}-1build1_all.deb deluge-web_${deversion}-1build1_all.deb deluged_${deversion}-1build1_all.deb"
 			for DEB in $DEBASE; do
 				_download ${PACKAGE} ${DEB}
@@ -574,7 +577,9 @@ function _installDeluge() {
 		else
 			APP_BASEDEPS="python python-dev python-pip"
 			_installDepends
+			_execute "pip2 install --upgrade wheel"
 			_execute "pip2 install --upgrade twisted[tls]"
+			_execute "pip2 install --upgrade future"
 			DEBASE="deluge-common_1.3.15-1build1_all.deb deluge-console_1.3.15-1build1_all.deb deluge-gtk_1.3.15-1build1_all.deb deluge-web_1.3.15-1build1_all.deb deluged_1.3.15-1build1_all.deb"
 			for DEB in $DEBASE; do
 				_download ${PACKAGE} ${DEB}
@@ -593,7 +598,10 @@ function _installDeluge() {
 			done
 			APP_BASEDEPS="build-essential intltool libtool libssl-dev libgeoip-dev librsvg2-common geoip-database python3 python3-setuptools intltool python3-zope.interface python3-twisted python3-openssl python3-xdg python3-chardet python3-mako python3-setproctitle python3-rencode python3-pil librsvg2-common xdg-utils"
 			_installDepends
+			_execute "pip3 install --upgrade wheel"
+			_execute "pip3 install --upgrade cryptography"
 			_execute "pip3 install --upgrade twisted[tls]"
+			_execute "pip3 install --upgrade --force-reinstall pyOpenSSL"
 			tar -xf deluge-${deversion}.tar.xz
 			cd deluge-${deversion} || exit 1
 			_execute "python3 setup.py build"
@@ -758,14 +766,21 @@ function _configureApp() {
 		echo "$DWPORT" >/install/$username.deluge-web.port
 		passphrase=$(cat /root/.ssh/local_user)
 		passtext=$(cat /root/.qbuser/${username}.info | cut -d: -f2)
-		if [[ $CODENAME == xenial ]]; then
+		# shellcheck disable=SC2091
+		if ! $(openssl version | awk '$2 ~ /(^0\.)|(^1\.(0\.|1\.0))/ { exit 1 }'); then
 			password=$(echo ${passtext} | openssl enc -aes-128-ecb -a -d -pass pass:${passphrase} -nosalt)
 		else
 			password=$(echo ${passtext} | openssl enc -aes-128-ecb -pbkdf2 -a -d -pass pass:${passphrase} -nosalt)
 		fi
 		DWSALT=$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 32)
-		DWP=$(python2 /usr/local/bin/quickbox/system/auxiliary/deluge.Userpass.py ${password} ${DWSALT})
-		DUDID=$(python2 /usr/local/bin/quickbox/system/auxiliary/deluge.addHost.py)
+		if _version_gt ${deversion} 2.0; then
+			DWP=$(python3 /usr/local/bin/quickbox/system/auxiliary/deluge.Userpass.py ${password} ${DWSALT})
+			DUDID=$(python3 /usr/local/bin/quickbox/system/auxiliary/deluge.addHost.py)
+		else
+			DWP=$(python2 /usr/local/bin/quickbox/system/auxiliary/deluge.Userpass.py ${password} ${DWSALT})
+			DUDID=$(python2 /usr/local/bin/quickbox/system/auxiliary/deluge.addHost.py)
+		fi
+
 
 		if [[ ! -d /home/${username}/.config/deluge/plugins ]]; then
 			mkdir -p /home/${username}/.config/deluge/plugins
@@ -989,7 +1004,7 @@ EOF
 			if [[ ! -f /install/.pyenv.lock ]]; then
 				if [[ ${de_major_version} == "2.0" ]]; then
 					if [[ "$CODENAME" == "stretch" ]]; then
-						_execute '/usr/local/bin/python3.7 -m pip install deluge-client'
+						_execute '/usr/local/bin/python3.8 -m pip install deluge-client'
 					else
 						_execute 'python3 -m pip install deluge-client'
 					fi

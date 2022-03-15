@@ -252,7 +252,7 @@ OUTTO=$(pwd)
 # SCRIPT FUNCTIONS
 ################################################################################
 function _usage() {
-    echo -e "\nQuick Box Lite mktorrent wrapper"
+    echo -e "\nQuick Box ARM mktorrent wrapper"
     echo -e "\nUsage: \n$(basename "$0") [-hq] [-i inputfile] [-l logfile] [-o outputfile]"
     echo -e "\nOptions:\n"
     echo "-i, --input <inputfile>       input file path"

@@ -86,9 +86,8 @@ APP_WEB_PORT_HIGH="15200"
 
 APP_LOCK=.$APP_NAME.lock
 OUTTO=/srv/dashboard/db/output.log
-qbitversion=4.2.5
-libtversion=1.1.14
-libt_major_version=1.1
+qbitversion_default=4.2.5
+libtversion_default=1.1.14
 cdn=$(cat /install/.cdn.lock)
 use_static=false
 
@@ -100,7 +99,7 @@ BRANCH_LIBQBPASS="https://github.com/KozakaiAya/libqbpasswd.git"
 ################################################################################
 function _usage() {
 	echo -e "\nQuickBox ARM $APP_TITLE Installer"
-	echo -e "\nUsage: \n$(basename "$0") [-h] [-l logfile] [--lt] [--qb]"
+	echo -e "\nUsage: \n$(basename "$0") [-h] [-l logfile] [-s static] [--lt] [--qb]"
 	echo -e "\nOptions:\n"
 	echo "-l, --log <logfile>       specific log file"
 	echo "--lt <version>            the Libtorrent version you want to install"
@@ -353,6 +352,8 @@ function _installLibt() {
 			1.2.10) LTCIMMIT="70f1de3" ;;
 			1.2.11) LTCIMMIT="471e772" ;;
 			1.2.12) LTCIMMIT="e3f2b01" ;;
+			1.2.13) LTCIMMIT="e00a152" ;;
+			1.2.14) LTCIMMIT="33a10d5" ;;
 			*) LTCIMMIT="." ;;
 			esac
 		elif [[ ${libt_major_version} == "1.1" ]]; then
@@ -520,6 +521,8 @@ function _installStatic() {
 			1.2.10) libttag="libtorrent-1.2.10" ;;
 			1.2.11) libttag="v1.2.11" ;;
 			1.2.12) libttag="v1.2.12" ;;
+			1.2.13) libttag="v1.2.13" ;;
+			1.2.14) libttag="v1.2.14" ;;
 			1.1.0) libttag="libtorrent-1_1" ;;
 			1.1.1) libttag="libtorrent-1_1_1" ;;
 			1.1.2) libttag="libtorrent-1_1_2" ;;
@@ -552,7 +555,21 @@ function _installStatic() {
 
 function _installApp() {
 	_info "Building ${APP_TITLE}..."
+	if [ -z "${qbitversion}" ]; then
+		qbitversion=${qbitversion_default}
+	fi
 	qbit_major_version=$(echo ${qbitversion}| cut -d. -f1,2)
+	if [ -z "${libtversion}" ]; then
+		if (_version_gt ${qbitversion} "4.3.1"); then
+			_info "Fetching package list..."
+			cd /tmp || exit 1
+			wget -t3 -T20 -q -O file.lst https://qbit-static.ezapi.net/file.lst
+			libtversion=$(cat file.lst | grep -wE "qbittorrent-nox\.qbit${qbitversion}_lt.*\.armhf" | awk '{ print $3}' | sort -r | head -n 1)
+			_warning "Use Libtorrent ${libtversion} for ${qbit_major_version}.x"
+		else
+			libtversion=${libtversion_default}
+		fi
+	fi
 	libt_major_version=$(echo ${libtversion}| cut -d. -f1,2)
 	# version check
 	libt_fallback=false
@@ -570,7 +587,7 @@ function _installApp() {
 			libt_fallback=true
 		fi
 	fi
-	if ${libt_fallback}; then _warning "Use Libtorrent ${libtversion} against ${qbit_major_version}x"; fi
+	if ${libt_fallback}; then _warning "Use Libtorrent ${libtversion} for ${qbit_major_version}.x"; fi
 	if (_version_gt ${qbit_major_version} "4.2"); then
 		use_static=true
 	fi
@@ -579,7 +596,11 @@ function _installApp() {
 		_info "Fetching package list..."
 		cd /tmp || exit 1
 		wget -t3 -T20 -q -O file.lst https://qbit-static.ezapi.net/file.lst
-		static_binary=$(cat file.lst | grep -w "qbittorrent-nox.qbit${qbitversion}_lt${libtversion}.armhf" | awk '{ print $4}')
+		if [ -z "${libtversion}" ]; then
+			static_binary=$(cat file.lst | grep -wE "qbittorrent-nox\.qbit${qbitversion}_lt.*\.armhf" | awk '{ print $4}' | sort -r | head -n 1)
+		else
+			static_binary=$(cat file.lst | grep -w "qbittorrent-nox.qbit${qbitversion}_lt${libtversion}.armhf" | awk '{ print $4}')
+		fi
 		rm -f file.lst
 		_installStatic
 	else
@@ -646,7 +667,8 @@ function _configureApp() {
 		echo "$PORT" >/install/$username.$APP_NAME.port
 		passphrase=$(cat /root/.ssh/local_user)
 		passtext=$(cat /root/.qbuser/${username}.info | cut -d: -f2)
-		if [[ $CODENAME == xenial ]]; then
+		# shellcheck disable=SC2091
+		if ! $(openssl version | awk '$2 ~ /(^0\.)|(^1\.(0\.|1\.0))/ { exit 1 }'); then
 			password=$(echo ${passtext} | openssl enc -aes-128-ecb -a -d -pass pass:"${passphrase}" -nosalt)
 		else
 			password=$(echo ${passtext} | openssl enc -aes-128-ecb -pbkdf2 -a -d -pass pass:"${passphrase}" -nosalt)

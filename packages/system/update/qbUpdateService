@@ -30,6 +30,20 @@ function _updateservice() {
 			_info "Installing Node.js..."
 			cd /tmp || exit 1
 			_execute "curl -sL https://deb.nodesource.com/setup_12.x -o nodesource_setup.sh"
+			bash nodesource_setup.sh >>"${OUTTO}" 2>&1
+			exitstatus=$?
+			counter=0
+			while [[ ${exitstatus} -eq 1 ]]; do
+				if [[ ${counter} -gt 2 ]]; then
+					_error "Fail to update nodejs source list! exit"
+					exit 1
+				else
+					bash nodesource_setup.sh >>"${OUTTO}" 2>&1
+					exitstatus=$?
+					((counter++))
+					_warning "Fail to update nodejs source list! retry..."
+				fi
+			done
 			_execute "sudo bash nodesource_setup.sh"
 			_execute "apt-get install -y nodejs"
 			if [[ -f /tmp/nodesource_setup.sh ]]; then
@@ -39,16 +53,40 @@ function _updateservice() {
 		# install service
 		_info "Installing Dashboard service..."
 		cd ${local_setup_dashboard}ws ||exit 1
-		_execute "npm install --production"
+		_execute "npm ci --production"
 		\cp -f ${local_setup_template}systemd/quickbox-ws.service.template /etc/systemd/system/quickbox-ws.service
 		_execute "systemctl daemon-reload"
 		_execute "systemctl enable quickbox-ws.service"
 		touch /install/.quickbox-ws.lock
 		_success "QuickBox service updated"
 	else
+		# upgrade to v14
+		if [[ ! $(which npm) ]] || [[ ! $(node --version) =~ "v14" ]]; then
+			_info "Upgrading Node.js..."
+			cd /tmp || exit 1
+			_execute "curl -sL https://deb.nodesource.com/setup_14.x -o nodesource_setup.sh"
+			bash nodesource_setup.sh >>"${OUTTO}" 2>&1
+			exitstatus=$?
+			counter=0
+			while [[ ${exitstatus} -eq 1 ]]; do
+				if [[ ${counter} -gt 2 ]]; then
+					_error "Fail to update nodejs source list! exit"
+					exit 1
+				else
+					bash nodesource_setup.sh >>"${OUTTO}" 2>&1
+					exitstatus=$?
+					((counter++))
+					_warning "Fail to update nodejs source list! retry..."
+				fi
+			done
+			_execute "apt-get install -y nodejs"
+			if [[ -f /tmp/nodesource_setup.sh ]]; then
+				rm nodesource_setup.sh
+			fi
+		fi
 		_info "Reconfig Dashboard service..."
 		cd ${local_setup_dashboard}ws ||exit 1
-		_execute "npm install --production"
+		_execute "npm ci --production"
 		_success "Dashboard service updated"
 	fi
 	# Update flexget nginx reverse proxy

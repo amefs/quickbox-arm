@@ -126,7 +126,7 @@ $L['FLOOD'] = 'Flood es una interfaz web para rtorrent. Implementa un servidor N
 $L['LECERT'] = 'Let’s Encrypt es una autoridad de certificación (CA) gratuita, automatizada y abierta, que se ejecuta en beneficio del público por el <a href="https://letsencrypt.org/isrg/" target="_blank">Grupo de Investigación de Seguridad de Internet (ISRG)</a>.';
 $L['NETDATA'] = 'Netdata is distributed, real-time, performance and health monitoring for systems and applications.';
 $L['NFS'] = 'Network File System (NFS) is a distributed file system protocol originally developed by Sun Microsystems (Sun) in 1984, allowing a user on a client computer to access files over a computer network much like local storage is accessed.';
-$L['NOVNC'] = 'NoVNC es un cliente VNC escrito completamente en HTML5 de manera que nos permite conectarnos a un servidor remoto sin necesidad de instalar ningún software adicional. noVNC funciona bien en cualquier navegador moderno, incluidos los navegadores móviles (iOS y Android).';
+$L['NOVNC'] = 'noVNC is both a VNC client JavaScript library as well as an application built on top of that library. noVNC runs well in any modern browser including mobile browsers (iOS and Android).';
 $L['OPENVPN'] = 'OpenVPN is open-source commercial software that implements virtual private network (VPN) techniques to create secure point-to-point or site-to-site connections in routed or bridged configurations and remote access facilities.';
 $L['PLEX'] = 'Plex lets you stream your content to any Plex enabled device.';
 $L['QBITTORRENT'] = 'qBittorrent is a free and reliable P2P BitTorrent client. An advanced and multi-platform BitTorrent client with a nice Qt user interface as well as a Web UI for remote control and an integrated search engine.';
@@ -341,7 +341,6 @@ $L['UNINSTALLING_TITLE'] = 'Desinstalando';
 //GRITTER TEXT
 $L['UNINSTALLING_TXT_1'] = 'Por favor, espera,';
 $L['UNINSTALLING_TXT_2'] = 'está siendo desinstalado de tu sistema.';
-
 
 ////////////////////////////////////////////////////////////////////////////
 // SAMPLE
